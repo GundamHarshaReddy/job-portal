@@ -124,50 +124,141 @@ async def require_admin(request: Request) -> dict:
     return user
 
 # ---- Telegram Helpers ----
-async def send_telegram_message(chat_id: str, text: str):
+async def send_telegram_message(chat_id: str, text: str, reply_markup: dict = None):
+    """Send a Telegram message, optionally with inline keyboard buttons."""
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("No Telegram bot token configured")
         return
     try:
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         async with httpx.AsyncClient() as client_http:
             resp = await client_http.post(
                 f"{TELEGRAM_API}/sendMessage",
-                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+                json=payload
             )
             if resp.status_code != 200:
                 logger.error(f"Telegram send failed: {resp.text}")
     except Exception as e:
         logger.error(f"Telegram error: {e}")
 
-async def notify_all_users(text: str):
+async def answer_callback_query(callback_query_id: str, text: str = ""):
+    """Acknowledge a callback query (removes loading spinner on button)."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        async with httpx.AsyncClient() as client_http:
+            await client_http.post(
+                f"{TELEGRAM_API}/answerCallbackQuery",
+                json={"callback_query_id": callback_query_id, "text": text}
+            )
+    except Exception as e:
+        logger.error(f"Callback query error: {e}")
+
+async def edit_telegram_message(chat_id: str, message_id: int, text: str):
+    """Edit an existing Telegram message (used to update after button click)."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        async with httpx.AsyncClient() as client_http:
+            await client_http.post(
+                f"{TELEGRAM_API}/editMessageText",
+                json={"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"}
+            )
+    except Exception as e:
+        logger.error(f"Edit message error: {e}")
+
+def build_job_buttons(job_id: str) -> dict:
+    """Build inline keyboard with Applied / Not Interested / Remind Me Later buttons."""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "\u2705 Applied", "callback_data": f"applied:{job_id}"},
+                {"text": "\u274c Not Interested", "callback_data": f"not_interested:{job_id}"}
+            ],
+            [
+                {"text": "\U0001f514 Remind Me Later", "callback_data": f"remind:{job_id}"}
+            ]
+        ]
+    }
+
+async def notify_all_users_new_job(text: str, job_id: str):
+    """Send a new job notification with inline buttons to all linked users."""
     users = await db.users.find(
         {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
         {"_id": 0, "telegram_chat_id": 1}
     ).to_list(1000)
+    buttons = build_job_buttons(job_id)
     for user in users:
         chat_id = user.get("telegram_chat_id")
         if chat_id:
-            await send_telegram_message(chat_id, text)
+            await send_telegram_message(chat_id, text, reply_markup=buttons)
 
 async def check_deadlines():
-    """Check for jobs with deadlines within 24 hours and notify users."""
+    """Check for jobs with upcoming deadlines and notify users who opted for reminders."""
     now = datetime.now(timezone.utc)
-    tomorrow = now + timedelta(hours=24)
     
     jobs = await db.jobs.find({}, {"_id": 0}).to_list(1000)
     for job in jobs:
         try:
             deadline = datetime.fromisoformat(job["deadline"].replace("Z", "+00:00"))
-            if now < deadline <= tomorrow:
+            if deadline <= now:
+                continue  # Skip expired jobs
+            
+            hours_left = (deadline - now).total_seconds() / 3600
+            job_id = job["id"]
+            
+            # Find users who clicked "Remind Me Later" for this job
+            remind_responses = await db.job_responses.find(
+                {"job_id": job_id, "response": "remind"}
+            ).to_list(1000)
+            
+            for resp in remind_responses:
+                chat_id = resp["chat_id"]
+                
+                # Check cooldown: every 6h if deadline <= 24h, every 24h otherwise
+                if hours_left <= 24:
+                    cooldown_hours = 6
+                else:
+                    cooldown_hours = 24
+                
+                # Check if we already sent a reminder within the cooldown period
+                cutoff = now - timedelta(hours=cooldown_hours - 0.5)  # 30 min buffer
+                already_sent = await db.reminder_log.find_one({
+                    "chat_id": chat_id,
+                    "job_id": job_id,
+                    "sent_at": {"$gte": cutoff.isoformat()}
+                })
+                
+                if already_sent:
+                    continue  # Already reminded recently
+                
+                # Determine urgency label
+                if hours_left <= 6:
+                    urgency = "\U0001f6a8 URGENT"
+                elif hours_left <= 24:
+                    urgency = "\u23f0 Less than 24 hours left"
+                else:
+                    days_left = int(hours_left / 24)
+                    urgency = f"\U0001f4c5 {days_left} day{'s' if days_left != 1 else ''} left"
+                
                 msg = (
-                    f"<b>Deadline Reminder!</b>\n\n"
+                    f"<b>{urgency}</b>\n\n"
                     f"<b>{job['role']}</b> at <b>{job['company_name']}</b>\n"
                     f"Deadline: {job['deadline']}\n"
                     f"Apply: {job['apply_link']}"
                 )
-                await notify_all_users(msg)
-        except Exception:
-            pass
+                await send_telegram_message(chat_id, msg)
+                
+                # Log that we sent this reminder
+                await db.reminder_log.insert_one({
+                    "chat_id": chat_id,
+                    "job_id": job_id,
+                    "sent_at": now.isoformat()
+                })
+        except Exception as e:
+            logger.error(f"Deadline check error for job {job.get('id', '?')}: {e}")
 
 # ---- Startup ----
 @app.on_event("startup")
@@ -176,6 +267,8 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
     await db.jobs.create_index("id", unique=True)
+    await db.job_responses.create_index([("chat_id", 1), ("job_id", 1)], unique=True)
+    await db.reminder_log.create_index([("chat_id", 1), ("job_id", 1), ("sent_at", 1)])
     
     # Seed admin
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@friendboard.com')
@@ -311,8 +404,8 @@ async def create_job(data: JobCreate, request: Request):
         f"Posted by: {user['name']}\n"
         f"Apply: {data.apply_link}"
     )
-    # Fire and forget
-    asyncio.create_task(notify_all_users(msg))
+    # Fire and forget — send with inline buttons
+    asyncio.create_task(notify_all_users_new_job(msg, job_doc["id"]))
     
     return {
         "id": job_doc["id"],
@@ -388,13 +481,13 @@ async def link_telegram(data: TelegramLink, request: Request):
 async def telegram_webhook(request: Request):
     data = await request.json()
     
+    # Handle regular messages (e.g. /start command)
     if "message" in data:
         message = data["message"]
         chat_id = str(message["chat"]["id"])
         text = message.get("text", "")
         
         if text.startswith("/start"):
-            # Try to extract user email from /start command
             parts = text.split(" ")
             if len(parts) > 1:
                 email = parts[1]
@@ -403,11 +496,64 @@ async def telegram_webhook(request: Request):
                     {"$set": {"telegram_chat_id": chat_id}}
                 )
                 if result.modified_count > 0:
-                    await send_telegram_message(chat_id, "Your Telegram is now linked to FriendBoard! You'll receive job notifications here.")
+                    await send_telegram_message(chat_id, "\u2705 Your Telegram is now linked to FriendBoard! You'll receive job notifications here.")
                 else:
-                    await send_telegram_message(chat_id, "Could not find an account with that email. Make sure admin has created your account first.")
+                    await send_telegram_message(chat_id, "\u274c Could not find an account with that email. Make sure admin has created your account first.")
             else:
-                await send_telegram_message(chat_id, "Welcome to FriendBoard Bot!\n\nTo link your account, use:\n/start your@email.com\n\nOr link via the app settings.")
+                await send_telegram_message(
+                    chat_id,
+                    "\U0001f44b <b>Welcome to FriendBoard Bot!</b>\n\n"
+                    "To link your account, use:\n"
+                    "<code>/start your@email.com</code>\n\n"
+                    "Once linked, you'll receive job notifications with these options:\n"
+                    "\u2705 <b>Applied</b> — stop reminders for that job\n"
+                    "\u274c <b>Not Interested</b> — stop reminders for that job\n"
+                    "\U0001f514 <b>Remind Me Later</b> — get reminders until the deadline"
+                )
+    
+    # Handle inline button clicks (callback queries)
+    if "callback_query" in data:
+        callback = data["callback_query"]
+        callback_id = callback["id"]
+        chat_id = str(callback["message"]["chat"]["id"])
+        message_id = callback["message"]["message_id"]
+        original_text = callback["message"].get("text", "")
+        callback_data = callback.get("data", "")
+        
+        # Parse callback: "applied:JOB_ID", "not_interested:JOB_ID", "remind:JOB_ID"
+        parts = callback_data.split(":", 1)
+        if len(parts) == 2:
+            action, job_id = parts
+            
+            if action in ("applied", "not_interested", "remind"):
+                # Save response (upsert — one response per user per job)
+                await db.job_responses.update_one(
+                    {"chat_id": chat_id, "job_id": job_id},
+                    {"$set": {
+                        "response": action,
+                        "responded_at": datetime.now(timezone.utc).isoformat()
+                    }},
+                    upsert=True
+                )
+                
+                # Build confirmation and edit the original message
+                if action == "applied":
+                    status_line = "\n\n\u2705 <i>You marked this as Applied. No more reminders for this job.</i>"
+                    popup = "Marked as Applied!"
+                elif action == "not_interested":
+                    status_line = "\n\n\u274c <i>You marked this as Not Interested. No more reminders for this job.</i>"
+                    popup = "Marked as Not Interested."
+                else:  # remind
+                    status_line = "\n\n\U0001f514 <i>Reminder set! You'll be reminded every 24h, and every 6h in the last day.</i>"
+                    popup = "Reminder set! \U0001f514"
+                
+                # Edit the message to show the choice and remove buttons
+                await edit_telegram_message(chat_id, message_id, original_text + status_line)
+                await answer_callback_query(callback_id, popup)
+            else:
+                await answer_callback_query(callback_id, "Unknown action")
+        else:
+            await answer_callback_query(callback_id, "Invalid data")
     
     return {"ok": True}
 

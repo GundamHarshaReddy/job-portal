@@ -196,8 +196,18 @@ async def notify_all_users_new_job(text: str, job_id: str):
             await send_telegram_message(chat_id, text, reply_markup=buttons)
 
 async def check_deadlines():
-    """Check for jobs with upcoming deadlines and notify users who opted for reminders."""
+    """Check for jobs with upcoming deadlines and notify all users except those who opted out."""
     now = datetime.now(timezone.utc)
+    
+    # Get all linked users
+    all_users = await db.users.find(
+        {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
+        {"_id": 0, "telegram_chat_id": 1}
+    ).to_list(1000)
+    all_chat_ids = [u["telegram_chat_id"] for u in all_users if u.get("telegram_chat_id")]
+    
+    if not all_chat_ids:
+        return
     
     jobs = await db.jobs.find({}, {"_id": 0}).to_list(1000)
     for job in jobs:
@@ -209,14 +219,16 @@ async def check_deadlines():
             hours_left = (deadline - now).total_seconds() / 3600
             job_id = job["id"]
             
-            # Find users who clicked "Remind Me Later" for this job
-            remind_responses = await db.job_responses.find(
-                {"job_id": job_id, "response": "remind"}
+            # Find users who clicked "Applied" or "Not Interested" — they opted OUT
+            opted_out = await db.job_responses.find(
+                {"job_id": job_id, "response": {"$in": ["applied", "not_interested"]}}
             ).to_list(1000)
+            opted_out_chat_ids = {r["chat_id"] for r in opted_out}
             
-            for resp in remind_responses:
-                chat_id = resp["chat_id"]
-                
+            # Everyone else gets reminders (no response = default remind)
+            remind_chat_ids = [cid for cid in all_chat_ids if cid not in opted_out_chat_ids]
+            
+            for chat_id in remind_chat_ids:
                 # Check cooldown: every 6h if deadline <= 24h, every 24h otherwise
                 if hours_left <= 24:
                     cooldown_hours = 6

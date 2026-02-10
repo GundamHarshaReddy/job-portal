@@ -1,0 +1,167 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "FriendBoard",
+      "vibe": "Private Club Utility",
+      "principles": [
+        "Clarity over Decoration",
+        "Generous Whitespace",
+        "Micro-Interactions for Delight",
+        "Content-First Hierarchy"
+      ]
+    },
+    "typography": {
+      "headings": {
+        "family": "Outfit, sans-serif",
+        "weights": ["500", "600", "700"],
+        "usage": "Use for all page titles, section headers, and card titles."
+      },
+      "body": {
+        "family": "Inter, sans-serif",
+        "weights": ["400", "500"],
+        "usage": "Use for all paragraph text, inputs, and data tables."
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "usage": "Use for specific data points like IDs or code snippets if any."
+      },
+      "scale": {
+        "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+        "h2": "text-3xl font-semibold tracking-tight",
+        "h3": "text-2xl font-semibold",
+        "body": "text-base leading-relaxed",
+        "small": "text-sm text-muted-foreground"
+      }
+    },
+    "colors": {
+      "theme_strategy": "class_based_dark_mode",
+      "light_mode": {
+        "background": "#F8FAFC",
+        "foreground": "#0F172A",
+        "card": "#FFFFFF",
+        "card_foreground": "#0F172A",
+        "primary": "#2563EB",
+        "primary_foreground": "#FFFFFF",
+        "secondary": "#F1F5F9",
+        "secondary_foreground": "#0F172A",
+        "muted": "#F1F5F9",
+        "muted_foreground": "#64748B",
+        "accent": "#F1F5F9",
+        "accent_foreground": "#0F172A",
+        "destructive": "#EF4444",
+        "destructive_foreground": "#FFFFFF",
+        "border": "#E2E8F0",
+        "input": "#E2E8F0",
+        "ring": "#2563EB"
+      },
+      "dark_mode": {
+        "background": "#020817",
+        "foreground": "#F8FAFC",
+        "card": "#0F172A",
+        "card_foreground": "#F8FAFC",
+        "primary": "#3B82F6",
+        "primary_foreground": "#FFFFFF",
+        "secondary": "#1E293B",
+        "secondary_foreground": "#F8FAFC",
+        "muted": "#1E293B",
+        "muted_foreground": "#94A3B8",
+        "accent": "#1E293B",
+        "accent_foreground": "#F8FAFC",
+        "destructive": "#7F1D1D",
+        "destructive_foreground": "#F8FAFC",
+        "border": "#1E293B",
+        "input": "#1E293B",
+        "ring": "#3B82F6"
+      },
+      "palettes": {
+        "admin": "Neutral/Slate base with strict borders",
+        "friend": "Warmer/Softer accents allowed, but keeping to the Blue/Slate system"
+      }
+    },
+    "spacing": {
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "section_gap": "gap-8 md:gap-12",
+      "card_padding": "p-6",
+      "input_height": "h-10"
+    },
+    "border_radius": {
+      "default": "rounded-lg",
+      "card": "rounded-xl",
+      "button": "rounded-md",
+      "input": "rounded-md"
+    },
+    "shadows": {
+      "default": "shadow-sm",
+      "hover": "shadow-md transition-shadow duration-200",
+      "card": "shadow-[0_1px_3px_0_rgb(0,0,0,0.1),_0_1px_2px_-1px_rgb(0,0,0,0.1)]"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      "ghost": "hover:bg-accent hover:text-accent-foreground",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+    },
+    "cards": {
+      "style": "bg-card text-card-foreground border border-border shadow-sm",
+      "hover_effect": "hover:border-primary/50 transition-colors duration-200"
+    },
+    "inputs": {
+      "style": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "layout_strategies": {
+    "login_page": {
+      "structure": "Grid split: 1 col (mobile) / 2 cols (desktop)",
+      "left_panel": "Form container, centered vertically, spacious padding (p-8 md:p-12)",
+      "right_panel": "Image cover (hidden on mobile), abstract office minimal image",
+      "image_url": "https://images.unsplash.com/photo-1734208682292-df2643d0c8d9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBtaW5pbWFsJTIwb2ZmaWNlJTIwd29ya3NwYWNlJTIwYWVzdGhldGljfGVufDB8fHx8MTc3MDcwMjY5MXww&ixlib=rb-4.1.0&q=85"
+    },
+    "job_board": {
+      "structure": "Single column vertical list for jobs, but use Grid for filters/header",
+      "card_style": "Row layout on desktop (Company Logo | Role Info | Tags | Apply Button), Stacked on mobile",
+      "masonry_alternative": "Use simple vertical stack with gap-4 for readability"
+    },
+    "leaderboard": {
+      "structure": "Top section: 'Podium' style for Top 3 (Gold/Silver/Bronze highlight rings). Below: Table/List for rest.",
+      "visuals": "Use minimal avatars or initials if no image. Progress bars for visual score comparison."
+    },
+    "admin_dashboard": {
+      "structure": "Sidebar or Topbar navigation. Dense data grid for User Management and Job Management.",
+      "visuals": "Clean tables with Shadcn Table component. Row actions (Edit/Delete) in a dropdown menu."
+    }
+  },
+  "assets": {
+    "icons": "lucide-react",
+    "images": {
+      "login_bg": "https://images.unsplash.com/photo-1734208682292-df2643d0c8d9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBtaW5pbWFsJTIwb2ZmaWNlJTIwd29ya3NwYWNlJTIwYWVzdGhldGljfGVufDB8fHx8MTc3MDcwMjY5MXww&ixlib=rb-4.1.0&q=85",
+      "placeholder_avatar": "https://api.dicebear.com/7.x/initials/svg?seed=",
+      "company_logo_placeholder": "https://api.dicebear.com/7.x/identicon/svg?seed="
+    }
+  },
+  "implementation_rules": {
+    "general": [
+      "Use 'sonner' for all toast notifications (success/error).",
+      "Ensure Dark Mode is implemented via 'dark' class on HTML element (handled by theme toggle).",
+      "Use 'lucide-react' for all icons.",
+      "Do not use 'Space Grotesk' font."
+    ],
+    "file_structure": [
+      "Components go in /app/frontend/src/components/ui",
+      "Pages go in /app/frontend/src/pages",
+      "Layouts go in /app/frontend/src/layouts"
+    ],
+    "testing": [
+      "Add data-testid to all interactive elements (buttons, inputs, links).",
+      "Format: data-testid='page-section-element-action'"
+    ]
+  },
+  "universal_guidelines": [
+      "Use 2-3x more spacing than feels comfortable.",
+      "Every interaction needs micro-animations (hover, focus, active).",
+      "Never use default browser scrollbars; customize or hide if possible.",
+      "Input fields should have clear focus rings.",
+      "Empty states must be designed (don't just show nothing, show a helpful message + icon)."
+  ]
+}

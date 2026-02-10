@@ -4,7 +4,6 @@ import axios from "axios";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -34,10 +33,13 @@ import {
   MoreVertical,
   Calendar,
   MapPin,
-  Building2,
   Briefcase,
   Clock,
   Inbox,
+  Linkedin,
+  Globe,
+  Rocket,
+  DoorOpen,
 } from "lucide-react";
 
 export default function JobsPage() {
@@ -121,6 +123,20 @@ export default function JobsPage() {
     return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";
   };
 
+  const getSourceConfig = (source) => {
+    switch (source) {
+      case "linkedin":
+        return { icon: Linkedin, color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" };
+      case "glassdoor":
+        return { icon: DoorOpen, color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" };
+      case "startup":
+        return { icon: Rocket, color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20" };
+      case "company_website":
+      default:
+        return { icon: Globe, color: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20" };
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -189,16 +205,15 @@ export default function JobsPage() {
             <Card
               key={job.id}
               data-testid={`job-card-${job.id}`}
-              className={`group transition-all duration-200 hover:border-primary/30 hover:shadow-md ${
-                isExpired(job.deadline) ? "opacity-60" : ""
-              } animate-fade-in`}
+              className={`group transition-all duration-200 hover:border-primary/30 hover:shadow-md ${isExpired(job.deadline) ? "opacity-60" : ""
+                } animate-fade-in`}
               style={{ animationDelay: `${i * 0.04}s` }}
             >
               <CardContent className="p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                   {/* Company icon */}
-                  <div className="hidden sm:flex h-12 w-12 rounded-xl bg-primary/5 border border-primary/10 items-center justify-center flex-shrink-0">
-                    <Building2 className="h-6 w-6 text-primary" />
+                  <div className={`hidden sm:flex h-12 w-12 rounded-xl border items-center justify-center flex-shrink-0 ${getSourceConfig(job.source).color}`}>
+                    {React.createElement(getSourceConfig(job.source).icon, { className: "h-6 w-6" })}
                   </div>
 
                   {/* Info */}

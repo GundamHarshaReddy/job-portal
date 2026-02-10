@@ -27,7 +27,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import axios from "axios";
-import { API } from "@/App";
 
 const navItems = [
   { to: "/jobs", label: "Jobs", icon: Briefcase },
@@ -94,10 +93,9 @@ export default function AppLayout() {
                   to={item.to}
                   data-testid={`nav-${item.label.toLowerCase().replace(" ", "-")}`}
                   className={({ isActive }) =>
-                    `flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    `flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
                     }`
                   }
                 >
@@ -160,10 +158,9 @@ export default function AppLayout() {
                   onClick={() => setMobileOpen(false)}
                   data-testid={`mobile-nav-${item.label.toLowerCase().replace(" ", "-")}`}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
                     }`
                   }
                 >

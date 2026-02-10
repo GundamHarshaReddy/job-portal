@@ -1,17 +1,19 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from pydantic import BaseModel
+from typing import Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
 import httpx
+import certifi
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 ROOT_DIR = Path(__file__).parent
@@ -19,7 +21,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
 db = client[os.environ['DB_NAME']]
 
 # Config
@@ -59,6 +61,7 @@ class JobCreate(BaseModel):
     location: str  # Remote / Onsite / Hybrid
     apply_link: str
     deadline: str  # ISO date string
+    source: str  # linkedin, glassdoor, company_website, startup
 
 class JobOut(BaseModel):
     id: str
@@ -71,6 +74,7 @@ class JobOut(BaseModel):
     posted_by: str
     posted_by_name: str
     created_at: str
+    source: str = "company_website"
 
 class RankingOut(BaseModel):
     user_id: str
@@ -137,7 +141,7 @@ async def send_telegram_message(chat_id: str, text: str):
 
 async def notify_all_users(text: str):
     users = await db.users.find(
-        {"telegram_chat_id": {"$ne": None, "$ne": ""}},
+        {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
         {"_id": 0, "telegram_chat_id": 1}
     ).to_list(1000)
     for user in users:
@@ -150,7 +154,7 @@ async def check_deadlines():
     now = datetime.now(timezone.utc)
     tomorrow = now + timedelta(hours=24)
     
-    jobs = await db.jobs.find({"_id": 0}).to_list(1000)
+    jobs = await db.jobs.find({}, {"_id": 0}).to_list(1000)
     for job in jobs:
         try:
             deadline = datetime.fromisoformat(job["deadline"].replace("Z", "+00:00"))
@@ -266,7 +270,7 @@ async def list_users(request: Request):
 
 @api_router.delete("/admin/users/{user_id}")
 async def delete_user(user_id: str, request: Request):
-    admin = await require_admin(request)
+    await require_admin(request)
     
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not user:
@@ -292,7 +296,8 @@ async def create_job(data: JobCreate, request: Request):
         "deadline": data.deadline,
         "posted_by": user["id"],
         "posted_by_name": user["name"],
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": data.source
     }
     await db.jobs.insert_one(job_doc)
     
@@ -300,13 +305,13 @@ async def create_job(data: JobCreate, request: Request):
     msg = (
         f"<b>New Job Posted!</b>\n\n"
         f"<b>{data.role}</b> at <b>{data.company_name}</b>\n"
+        f"Source: {data.source.replace('_', ' ').title()}\n"
         f"Type: {data.job_type} | Location: {data.location}\n"
         f"Deadline: {data.deadline}\n"
         f"Posted by: {user['name']}\n"
         f"Apply: {data.apply_link}"
     )
     # Fire and forget
-    import asyncio
     asyncio.create_task(notify_all_users(msg))
     
     return {
@@ -319,7 +324,8 @@ async def create_job(data: JobCreate, request: Request):
         "deadline": job_doc["deadline"],
         "posted_by": job_doc["posted_by"],
         "posted_by_name": job_doc["posted_by_name"],
-        "created_at": job_doc["created_at"]
+        "created_at": job_doc["created_at"],
+        "source": job_doc["source"]
     }
 
 @api_router.get("/jobs")

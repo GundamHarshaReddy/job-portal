@@ -32,6 +32,7 @@ export default function AddJobPage() {
     job_type: "",
     location: "",
     apply_link: "",
+    source: "company_website",
   });
   const [deadline, setDeadline] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ export default function AddJobPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.company_name || !form.role || !form.job_type || !form.location || !form.apply_link || !deadline) {
+    if (!form.company_name || !form.role || !form.job_type || !form.location || !form.apply_link || !deadline || !form.source) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -132,6 +133,31 @@ export default function AddJobPage() {
                     <SelectItem value="Hybrid">Hybrid</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Job Source</Label>
+                <Select value={form.source} onValueChange={(v) => handleChange("source", v)}>
+                  <SelectTrigger className="h-10" data-testid="add-job-source-select">
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="linkedin">LinkedIn</SelectItem>
+                    <SelectItem value="glassdoor">Glassdoor</SelectItem>
+                    <SelectItem value="company_website">Company Website</SelectItem>
+                    <SelectItem value="startup">Startup</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                {/* Spacer or move Apply Link here? Let's keep Apply Link full width below if possible, or move it here. 
+                     The original layout had 2 cols for Type/Location. 
+                     Let's put Source and Apply Link in one grid if we want, or just add Source above Apply Link.
+                     Actually, let's put Source next to Location? No, Type and Location match. 
+                     Let's add a new row for Source. 
+                  */}
               </div>
             </div>
 

@@ -432,7 +432,7 @@ async def create_job(data: JobCreate, request: Request):
         f"<b>{data.role}</b> at <b>{data.company_name}</b>\n"
         f"Source: {data.source.replace('_', ' ').title()}\n"
         f"Type: {data.job_type} | Location: {data.location}\n"
-        f"Deadline: {data.deadline}\n"
+        f"Deadline: {data.deadline[:10]}\n"
         f"Posted by: {user['name']}\n"
         f"Apply: {data.apply_link}"
     )

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth, API } from "@/App";
 import axios from "axios";
 import {
@@ -40,11 +40,7 @@ export default function ProfilePage() {
     const [editDialog, setEditDialog] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
-    useEffect(() => {
-        fetchUserJobs();
-    }, []);
-
-    const fetchUserJobs = async () => {
+    const fetchUserJobs = useCallback(async () => {
         try {
             const res = await axios.get(`${API}/users/me/jobs`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -56,7 +52,11 @@ export default function ProfilePage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [token]);
+
+    useEffect(() => {
+        if (token) fetchUserJobs();
+    }, [fetchUserJobs, token]);
 
     const handleDelete = async () => {
         if (!deleteDialog) return;

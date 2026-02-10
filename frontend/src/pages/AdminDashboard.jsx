@@ -33,7 +33,6 @@ import {
   Users,
   Briefcase,
   TrendingUp,
-  Calendar,
   Plus,
   Trash2,
   MoreVertical,
@@ -53,9 +52,8 @@ export default function AdminDashboard() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const headers = { Authorization: `Bearer ${token}` };
-
   const fetchData = useCallback(async () => {
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       const [statsRes, usersRes, jobsRes] = await Promise.all([
         axios.get(`${API}/admin/stats`, { headers }),
@@ -82,6 +80,7 @@ export default function AdminDashboard() {
       return;
     }
     setCreating(true);
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       const res = await axios.post(`${API}/admin/users`, newUser, { headers });
       setUsers((prev) => [...prev, res.data]);
@@ -98,6 +97,7 @@ export default function AdminDashboard() {
   const handleDeleteUser = async () => {
     if (!deleteDialog) return;
     setDeleting(true);
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       await axios.delete(`${API}/admin/users/${deleteDialog.id}`, { headers });
       setUsers((prev) => prev.filter((u) => u.id !== deleteDialog.id));
@@ -111,6 +111,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteJob = async (job) => {
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       await axios.delete(`${API}/jobs/${job.id}`, { headers });
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
@@ -206,11 +207,10 @@ export default function AdminDashboard() {
                       <TableCell className="font-medium">{u.name}</TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${
-                          u.role === "admin"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        }`}>
+                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${u.role === "admin"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          }`}>
                           {u.role}
                         </span>
                       </TableCell>
@@ -272,11 +272,10 @@ export default function AdminDashboard() {
                       <TableCell className="font-medium">{j.role}</TableCell>
                       <TableCell className="text-muted-foreground">{j.company_name}</TableCell>
                       <TableCell className="hidden sm:table-cell">
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${
-                          j.job_type === "Internship"
-                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        }`}>
+                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${j.job_type === "Internship"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          }`}>
                           {j.job_type}
                         </span>
                       </TableCell>

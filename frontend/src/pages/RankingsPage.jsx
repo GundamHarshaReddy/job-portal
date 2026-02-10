@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth, API } from "@/App";
+import { getAvatarColor } from "@/lib/avatarUtils";
 import axios from "axios";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, Medal, Award, Crown, Flame } from "lucide-react";
 
 export default function RankingsPage() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchRankings = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/rankings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.get(`${API}/rankings`, { headers });
       setRankings(res.data);
     } catch {
       toast.error("Failed to load rankings");
@@ -98,29 +98,31 @@ export default function RankingsPage() {
           {/* Podium */}
           <div className="flex items-end justify-center gap-4 sm:gap-8 pt-8 pb-4" data-testid="rankings-podium">
             {displayOrder.map((idx) => {
-              const user = podium[idx];
+              const u = podium[idx];
               const config = podiumConfig[idx];
-              if (!user) return <div key={idx} className="w-28" />;
+              if (!u) return <div key={idx} className="w-28" />;
+
+              const styles = getAvatarColor(u.name);
 
               return (
                 <div
-                  key={user.user_id}
+                  key={u.user_id}
                   className={`flex flex-col items-center animate-scale-in`}
                   style={{ animationDelay: `${idx * 0.1}s` }}
                   data-testid={`podium-${config.label}`}
                 >
-                  <div className={`relative ${config.size} rounded-full bg-gradient-to-br ${config.color} flex items-center justify-center ring-4 ${config.ring} mb-3`}>
+                  <div className={`relative ${config.size} rounded-full bg-gradient-to-br ${styles.gradient} flex items-center justify-center ring-4 ${config.ring} mb-3`}>
                     <span className={`${config.textSize} font-bold text-white`}>
-                      {user.name.charAt(0).toUpperCase()}
+                      {u.name.charAt(0).toUpperCase()}
                     </span>
                     <div className="absolute -top-2 -right-1">
                       <config.icon className="h-6 w-6 text-amber-500 drop-shadow" />
                     </div>
                   </div>
-                  <p className="font-semibold text-sm text-center">{user.name}</p>
+                  <p className="font-semibold text-sm text-center">{u.name}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <Flame className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-sm font-bold text-primary">{user.job_count}</span>
+                    <span className="text-sm font-bold text-primary">{u.job_count}</span>
                     <span className="text-xs text-muted-foreground">posts</span>
                   </div>
                   <span className={`mt-2 px-3 py-0.5 rounded-full text-xs font-medium border ${config.bg} ${config.borderColor}`}>
@@ -134,32 +136,34 @@ export default function RankingsPage() {
           {/* Rest of rankings */}
           {rest.length > 0 && (
             <div className="space-y-2" data-testid="rankings-list">
-              {rest.map((user, i) => (
-                <Card
-                  key={user.user_id}
-                  className="transition-all duration-200 hover:border-primary/30 animate-fade-in"
-                  style={{ animationDelay: `${(i + 3) * 0.05}s` }}
-                  data-testid={`ranking-row-${i + 4}`}
-                >
-                  <CardContent className="flex items-center gap-4 p-4">
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground">
-                      #{i + 4}
-                    </div>
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{user.name}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Flame className="h-4 w-4 text-primary" />
-                      <span className="text-lg font-bold">{user.job_count}</span>
-                      <span className="text-xs text-muted-foreground">posts</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {rest.map((u, i) => {
+                const styles = getAvatarColor(u.name);
+                return (
+                  <Card
+                    key={u.user_id}
+                    className="transition-all duration-200 hover:border-primary/30 animate-fade-in"
+                    style={{ animationDelay: `${(i + 3) * 0.05}s` }}
+                    data-testid={`ranking-row-${i + 4}`}
+                  >
+                    <CardContent className="flex items-center gap-4 p-4">
+                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground">
+                        #{i + 4}
+                      </div>
+                      <div className={`h-10 w-10 rounded-full ${styles.bg} flex items-center justify-center text-sm font-semibold ${styles.text}`}>
+                        {u.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{u.name}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Flame className="h-4 w-4 text-primary" />
+                        <span className="text-lg font-bold">{u.job_count}</span>
+                        <span className="text-xs text-muted-foreground">posts</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </>

@@ -5,10 +5,11 @@ import axios from "axios";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import LoginPage from "@/pages/LoginPage";
-import JobsPage from "@/pages/JobsPage";
-import AddJobPage from "@/pages/AddJobPage";
-import RankingsPage from "@/pages/RankingsPage";
-import AdminDashboard from "@/pages/AdminDashboard";
+import JobsPage from "./pages/JobsPage";
+import AddJobPage from "./pages/AddJobPage";
+import RankingsPage from "./pages/RankingsPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import ProfilePage from "./pages/ProfilePage";
 import AppLayout from "@/components/AppLayout";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -92,6 +93,7 @@ function AppRoutes() {
         <Route path="add-job" element={<AddJobPage />} />
         <Route path="rankings" element={<RankingsPage />} />
         {user?.role === "admin" && <Route path="admin" element={<AdminDashboard />} />}
+        <Route path="profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

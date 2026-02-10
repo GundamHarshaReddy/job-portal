@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
 import { useTheme } from "@/components/ThemeProvider";
+import { getAvatarColor } from "@/lib/avatarUtils";
 import {
   Briefcase,
   Plus,
@@ -12,21 +13,8 @@ import {
   Moon,
   Menu,
   X,
-  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import axios from "axios";
 
 const navItems = [
   { to: "/jobs", label: "Jobs", icon: Briefcase },
@@ -43,31 +31,14 @@ export default function AppLayout() {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [telegramOpen, setTelegramOpen] = useState(false);
-  const [chatId, setChatId] = useState(user?.telegram_chat_id || "");
-  const [saving, setSaving] = useState(false);
+
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  const handleTelegramLink = async () => {
-    if (!chatId.trim()) return;
-    setSaving(true);
-    try {
-      await axios.put(
-        `${API}/users/telegram`,
-        { telegram_chat_id: chatId.trim() },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Telegram linked successfully!");
-      setTelegramOpen(false);
-    } catch {
-      toast.error("Failed to link Telegram");
-    }
-    setSaving(false);
-  };
+
 
   const items = user?.role === "admin" ? [...adminItems, ...navItems] : navItems;
 
@@ -110,15 +81,6 @@ export default function AppLayout() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setTelegramOpen(true)}
-                data-testid="telegram-link-btn"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 data-testid="theme-toggle-btn"
                 className="text-muted-foreground hover:text-foreground"
@@ -126,9 +88,18 @@ export default function AppLayout() {
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <div className="hidden sm:flex items-center gap-3 pl-3 border-l ml-1">
-                <div className="text-right">
-                  <p className="text-sm font-medium leading-none">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 capitalize">{user?.role}</p>
+                <div className="flex items-center gap-3">
+                  <div className="text-right hidden lg:block">
+                    <NavLink to="/profile" className="text-sm font-medium leading-none hover:text-primary transition-colors">
+                      {user?.name}
+                    </NavLink>
+                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">{user?.role}</p>
+                  </div>
+                  <div className={`h-9 w-9 rounded-full ${user ? getAvatarColor(user.name).bg : 'bg-muted'} flex items-center justify-center border ring-2 ring-background`}>
+                    <span className={`text-sm font-bold ${user ? getAvatarColor(user.name).text : 'text-muted-foreground'}`}>
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
                 </div>
                 <Button variant="ghost" size="icon" onClick={handleLogout} data-testid="logout-btn" className="text-muted-foreground hover:text-destructive">
                   <LogOut className="h-4 w-4" />
@@ -186,33 +157,7 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Telegram Link Dialog */}
-      <Dialog open={telegramOpen} onOpenChange={setTelegramOpen}>
-        <DialogContent data-testid="telegram-dialog">
-          <DialogHeader>
-            <DialogTitle>Link Telegram</DialogTitle>
-            <DialogDescription>
-              Enter your Telegram Chat ID to receive job notifications. Start our bot and use /start your@email.com to auto-link.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="chat-id">Chat ID</Label>
-            <Input
-              id="chat-id"
-              placeholder="e.g. 123456789"
-              value={chatId}
-              onChange={(e) => setChatId(e.target.value)}
-              data-testid="telegram-chat-id-input"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTelegramOpen(false)} data-testid="telegram-cancel-btn">Cancel</Button>
-            <Button onClick={handleTelegramLink} disabled={saving} data-testid="telegram-save-btn">
-              {saving ? "Saving..." : "Link Telegram"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
     </div>
   );
 }

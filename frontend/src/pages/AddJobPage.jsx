@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { JOB_SOURCES, getSourceConfig } from "@/lib/jobSources";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -141,13 +142,31 @@ export default function AddJobPage() {
                 <Label>Job Source</Label>
                 <Select value={form.source} onValueChange={(v) => handleChange("source", v)}>
                   <SelectTrigger className="h-10" data-testid="add-job-source-select">
-                    <SelectValue placeholder="Select source" />
+                    <SelectValue placeholder="Select source">
+                      {form.source && (() => {
+                        const cfg = getSourceConfig(form.source);
+                        const Icon = cfg.icon;
+                        return (
+                          <span className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 flex-shrink-0" />
+                            {cfg.label}
+                          </span>
+                        );
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="linkedin">LinkedIn</SelectItem>
-                    <SelectItem value="glassdoor">Glassdoor</SelectItem>
-                    <SelectItem value="company_website">Company Website</SelectItem>
-                    <SelectItem value="startup">Startup</SelectItem>
+                  <SelectContent className="max-h-[280px]">
+                    {JOB_SOURCES.map((src) => {
+                      const Icon = src.icon;
+                      return (
+                        <SelectItem key={src.value} value={src.value}>
+                          <span className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 flex-shrink-0" />
+                            {src.label}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

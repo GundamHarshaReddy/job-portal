@@ -7,7 +7,7 @@ import logging
 import asyncio
 from pathlib import Path
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
@@ -124,13 +124,13 @@ async def require_admin(request: Request) -> dict:
     return user
 
 # ---- Telegram Helpers ----
-async def send_telegram_message(chat_id: str, text: str, reply_markup: dict = None):
+async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[dict] = None):
     """Send a Telegram message, optionally with inline keyboard buttons."""
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("No Telegram bot token configured")
         return
     try:
-        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
         if reply_markup:
             payload["reply_markup"] = reply_markup
         async with httpx.AsyncClient() as client_http:

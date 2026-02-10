@@ -36,11 +36,10 @@ import {
   Briefcase,
   Clock,
   Inbox,
-  Linkedin,
-  Globe,
-  Rocket,
-  DoorOpen,
+  Plus,
 } from "lucide-react";
+import { getSourceConfig } from "@/lib/jobSources";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function JobsPage() {
   const { user, token } = useAuth();
@@ -123,19 +122,7 @@ export default function JobsPage() {
     return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";
   };
 
-  const getSourceConfig = (source) => {
-    switch (source) {
-      case "linkedin":
-        return { icon: Linkedin, color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" };
-      case "glassdoor":
-        return { icon: DoorOpen, color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" };
-      case "startup":
-        return { icon: Rocket, color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20" };
-      case "company_website":
-      default:
-        return { icon: Globe, color: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20" };
-    }
-  };
+
 
   if (loading) {
     return (
@@ -190,14 +177,20 @@ export default function JobsPage() {
 
       {/* Job List */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="jobs-empty-state">
-          <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-            <Inbox className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold">No jobs found</h3>
-          <p className="text-muted-foreground text-sm mt-1">
-            {jobs.length === 0 ? "Be the first to post a job!" : "Try adjusting your filters"}
-          </p>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <EmptyState
+            title="No jobs found"
+            description={
+              search || typeFilter !== "all" || locationFilter !== "all"
+                ? "Try adjusting your filters or search query"
+                : "No jobs have been posted yet. Be the first to share an opportunity!"
+            }
+            action={
+              <Button onClick={() => window.location.href = "/add-job"} className="gap-2">
+                <Plus className="h-4 w-4" /> Post a Job
+              </Button>
+            }
+          />
         </div>
       ) : (
         <div className="space-y-3" data-testid="jobs-list">

@@ -63,6 +63,15 @@ class JobCreate(BaseModel):
     deadline: str  # ISO date string
     source: str  # linkedin, glassdoor, company_website, startup
 
+class JobUpdate(BaseModel):
+    company_name: Optional[str] = None
+    role: Optional[str] = None
+    job_type: Optional[str] = None
+    location: Optional[str] = None
+    apply_link: Optional[str] = None
+    deadline: Optional[str] = None
+    source: Optional[str] = None
+
 class JobOut(BaseModel):
     id: str
     company_name: str
@@ -81,6 +90,9 @@ class RankingOut(BaseModel):
     name: str
     email: str
     job_count: int
+
+class BroadcastMessage(BaseModel):
+    message: str
 
 class TelegramLink(BaseModel):
     telegram_chat_id: str
@@ -285,12 +297,14 @@ async def startup():
     # Seed admin
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@friendboard.com')
     admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+    desired_name = "GUNDAM HARSHA VARDHAN REDDY"
+    
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
         admin_doc = {
             "id": str(uuid.uuid4()),
             "email": admin_email,
-            "name": "Admin",
+            "name": desired_name,
             "password_hash": hash_password(admin_password),
             "role": "admin",
             "telegram_chat_id": None,
@@ -298,6 +312,12 @@ async def startup():
         }
         await db.users.insert_one(admin_doc)
         logger.info(f"Admin account created: {admin_email}")
+    elif existing.get("name") != desired_name:
+        await db.users.update_one(
+            {"email": admin_email},
+            {"$set": {"name": desired_name}}
+        )
+        logger.info(f"Admin name updated to {desired_name}")
     
     # Start scheduler for deadline reminders (every 6 hours)
     scheduler = AsyncIOScheduler()
@@ -433,6 +453,33 @@ async def create_job(data: JobCreate, request: Request):
         "source": job_doc["source"]
     }
 
+@api_router.put("/jobs/{job_id}")
+async def update_job(job_id: str, data: JobUpdate, request: Request):
+    user = await get_current_user(request)
+    
+    job = await db.jobs.find_one({"id": job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Check ownership or admin status
+    if job.get("posted_by") != user["id"] and user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="You can only edit your own jobs")
+    
+    update_data = {k: v for k, v in data.dict(exclude_unset=True).items()}
+    
+    if not update_data:
+        # Return job without _id
+        job.pop("_id", None)
+        return job
+        
+    await db.jobs.update_one(
+        {"id": job_id},
+        {"$set": update_data}
+    )
+    
+    updated_job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return updated_job
+
 @api_router.get("/jobs")
 async def list_jobs(request: Request):
     await get_current_user(request)
@@ -459,22 +506,31 @@ async def delete_job(job_id: str, request: Request):
 async def get_rankings(request: Request):
     await get_current_user(request)
     
+    # 1. Get job counts per user
+    job_counts = {}
     pipeline = [
-        {"$group": {"_id": "$posted_by", "job_count": {"$sum": 1}}},
-        {"$sort": {"job_count": -1}}
+        {"$group": {"_id": "$posted_by", "count": {"$sum": 1}}}
     ]
     results = await db.jobs.aggregate(pipeline).to_list(1000)
-    
-    rankings = []
     for r in results:
-        user = await db.users.find_one({"id": r["_id"]}, {"_id": 0})
-        if user:
-            rankings.append({
-                "user_id": user["id"],
-                "name": user["name"],
-                "email": user["email"],
-                "job_count": r["job_count"]
-            })
+        job_counts[r["_id"]] = r["count"]
+
+    # 2. Get all users
+    users = await db.users.find({}, {"_id": 0, "password": 0, "telegram_chat_id": 0}).to_list(1000)
+    
+    # 3. Build rankings list
+    rankings = []
+    for user in users:
+        count = job_counts.get(user["id"], 0)
+        rankings.append({
+            "user_id": user["id"],
+            "name": user["name"],
+            # Email removed for privacy
+            "job_count": count
+        })
+    
+    # 4. Sort by job_count (desc), then name (asc)
+    rankings.sort(key=lambda x: (-x["job_count"], x["name"]))
     
     return rankings
 
@@ -487,6 +543,33 @@ async def link_telegram(data: TelegramLink, request: Request):
         {"$set": {"telegram_chat_id": data.telegram_chat_id}}
     )
     return {"message": "Telegram linked", "telegram_chat_id": data.telegram_chat_id}
+
+# ---- Admin Broadcast ----
+@api_router.post("/admin/broadcast")
+async def broadcast_message(data: BroadcastMessage, request: Request):
+    await require_admin(request)
+    
+    if not data.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    users = await db.users.find(
+        {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
+        {"_id": 0, "telegram_chat_id": 1}
+    ).to_list(1000)
+    
+    sent_count: int = 0
+    failed_count: int = 0
+    for user in users:
+        chat_id = user.get("telegram_chat_id")
+        if chat_id:
+            try:
+                await send_telegram_message(chat_id, data.message)
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Failed to send to chat_id {chat_id}: {e}")
+                failed_count += 1
+    
+    return {"message": "Broadcast sent", "sent_count": sent_count, "failed_count": failed_count}
 
 # ---- Telegram Webhook ----
 @api_router.post("/telegram/webhook")
@@ -503,14 +586,25 @@ async def telegram_webhook(request: Request):
             parts = text.split(" ")
             if len(parts) > 1:
                 email = parts[1]
-                result = await db.users.update_one(
-                    {"email": email},
-                    {"$set": {"telegram_chat_id": chat_id}}
-                )
-                if result.modified_count > 0:
-                    await send_telegram_message(chat_id, "\u2705 Your Telegram is now linked to FriendBoard! You'll receive job notifications here.")
-                else:
+                user = await db.users.find_one({"email": email}, {"_id": 0})
+                
+                if not user:
                     await send_telegram_message(chat_id, "\u274c Could not find an account with that email. Make sure admin has created your account first.")
+                elif user.get("telegram_chat_id") and user["telegram_chat_id"] == chat_id:
+                    # Same user re-linking from the same account
+                    await send_telegram_message(chat_id, "\u2705 Your Telegram is already linked to FriendBoard!")
+                elif user.get("telegram_chat_id") and user["telegram_chat_id"] != chat_id:
+                    # Someone else trying to hijack this email's Telegram link
+                    await send_telegram_message(chat_id, "\u26d4 This email is already linked to another Telegram account. If this is your email, please contact the admin to unlink it first.")
+                    # Notify the original linked user about the attempt
+                    await send_telegram_message(user["telegram_chat_id"], f"\u26a0\ufe0f <b>Security Alert:</b> Someone tried to re-link your FriendBoard account ({email}) from a different Telegram account. If this wasn't you, no action is needed — your link is safe.")
+                else:
+                    # First time linking — no existing chat_id
+                    await db.users.update_one(
+                        {"email": email},
+                        {"$set": {"telegram_chat_id": chat_id}}
+                    )
+                    await send_telegram_message(chat_id, "\u2705 Your Telegram is now linked to FriendBoard! You'll receive job notifications here.")
             else:
                 await send_telegram_message(
                     chat_id,
@@ -569,7 +663,13 @@ async def telegram_webhook(request: Request):
     
     return {"ok": True}
 
-# ---- Stats (Admin) ----
+@api_router.get("/users/me/jobs")
+async def get_my_jobs(request: Request):
+    user = await get_current_user(request)
+    jobs = await db.jobs.find({"posted_by": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return jobs
+
+# ---- Get Jobs (Public) ----
 @api_router.get("/admin/stats")
 async def get_stats(request: Request):
     await require_admin(request)

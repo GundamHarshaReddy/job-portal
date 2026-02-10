@@ -38,7 +38,11 @@ import {
   MoreVertical,
   UserPlus,
   Send,
+  MessageSquare,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { AnimatedCounter } from "@/components/AnimatedCounter";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function AdminDashboard() {
   const { token } = useAuth();
@@ -51,6 +55,8 @@ export default function AdminDashboard() {
   const [newUser, setNewUser] = useState({ email: "", password: "", name: "" });
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [broadcastMsg, setBroadcastMsg] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
 
   const fetchData = useCallback(async () => {
     const headers = { Authorization: `Bearer ${token}` };
@@ -130,6 +136,25 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleBroadcast = async () => {
+    if (!broadcastMsg.trim()) {
+      toast.error("Please enter a message");
+      return;
+    }
+    setBroadcasting(true);
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.post(`${API}/admin/broadcast`, { message: broadcastMsg }, { headers });
+      toast.success(`Broadcast sent to ${res.data.sent_count} user(s)!`);
+      setBroadcastMsg("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send broadcast");
+    }
+    setBroadcasting(false);
+  };
+
+  const linkedUsersCount = users.filter((u) => u.telegram_chat_id).length;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -165,7 +190,9 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">{s.label}</p>
-                  <p className="text-2xl font-bold mt-1">{s.value}</p>
+                  <p className="text-2xl font-bold mt-1">
+                    <AnimatedCounter value={s.value} />
+                  </p>
                 </div>
                 <div className={`h-10 w-10 rounded-xl bg-muted flex items-center justify-center ${s.color}`}>
                   <s.icon className="h-5 w-5" />
@@ -178,12 +205,15 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <Tabs defaultValue="users" data-testid="admin-tabs">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="users" data-testid="admin-tab-users">
             <Users className="h-4 w-4 mr-2" /> Users ({users.length})
           </TabsTrigger>
           <TabsTrigger value="jobs" data-testid="admin-tab-jobs">
             <Briefcase className="h-4 w-4 mr-2" /> Jobs ({jobs.length})
+          </TabsTrigger>
+          <TabsTrigger value="broadcast" data-testid="admin-tab-broadcast">
+            <MessageSquare className="h-4 w-4 mr-2" /> Broadcast
           </TabsTrigger>
         </TabsList>
 
@@ -303,13 +333,69 @@ export default function AdminDashboard() {
                   ))}
                   {jobs.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        No jobs posted yet
+                      <TableCell colSpan={6} className="h-48 text-center">
+                        <EmptyState
+                          title="No jobs posted yet"
+                          description="Jobs posted by users will appear here."
+                          className="py-4"
+                        />
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="broadcast" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Send className="h-5 w-5 text-primary" />
+                Send Telegram Broadcast
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Send a message to all users with linked Telegram accounts ({linkedUsersCount} of {users.length} linked)
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="broadcast-msg">Message</Label>
+                <Textarea
+                  id="broadcast-msg"
+                  placeholder="Type your broadcast message here... Supports HTML: <b>bold</b>, <i>italic</i>, <code>code</code>"
+                  value={broadcastMsg}
+                  onChange={(e) => setBroadcastMsg(e.target.value)}
+                  rows={5}
+                  className="resize-none"
+                  data-testid="broadcast-textarea"
+                />
+              </div>
+              {linkedUsersCount === 0 ? (
+                <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                  ⚠️ No users have linked their Telegram yet. Ask users to message your bot with <code>/start their@email.com</code>
+                </div>
+              ) : (
+                <Button
+                  onClick={handleBroadcast}
+                  disabled={broadcasting || !broadcastMsg.trim()}
+                  className="gap-2"
+                  data-testid="broadcast-send-btn"
+                >
+                  {broadcasting ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Send to {linkedUsersCount} user{linkedUsersCount !== 1 ? "s" : ""}
+                    </>
+                  )}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

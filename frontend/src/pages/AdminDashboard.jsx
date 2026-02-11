@@ -49,6 +49,9 @@ import {
   XCircle,
   Clock,
   BarChart3,
+  ChevronDown,
+  ChevronRight,
+  Eye,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
@@ -69,6 +72,9 @@ export default function AdminDashboard() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [botAnalytics, setBotAnalytics] = useState(null);
   const [botLoading, setBotLoading] = useState(false);
+  const [expandedUser, setExpandedUser] = useState(null);
+  const [userDetail, setUserDetail] = useState(null);
+  const [userDetailLoading, setUserDetailLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     const headers = { Authorization: `Bearer ${token}` };
@@ -98,6 +104,25 @@ export default function AdminDashboard() {
     }
     setBotLoading(false);
   }, [token]);
+
+  const fetchUserDetail = useCallback(async (chatId) => {
+    if (expandedUser === chatId) {
+      setExpandedUser(null);
+      setUserDetail(null);
+      return;
+    }
+    setExpandedUser(chatId);
+    setUserDetailLoading(true);
+    setUserDetail(null);
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.get(`${API}/admin/bot-analytics/user/${chatId}`, { headers });
+      setUserDetail(res.data);
+    } catch {
+      setUserDetail({ responses: [], events: [] });
+    }
+    setUserDetailLoading(false);
+  }, [token, expandedUser]);
 
   useEffect(() => {
     fetchData();
@@ -537,8 +562,8 @@ export default function AdminDashboard() {
                           <TableCell className="text-center hidden sm:table-cell text-muted-foreground">{j.no_response}</TableCell>
                           <TableCell className="text-center">
                             <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-semibold ${j.response_rate >= 70 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                : j.response_rate >= 40 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                  : "bg-red-500/10 text-red-500"
+                              : j.response_rate >= 40 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                : "bg-red-500/10 text-red-500"
                               }`}>
                               {j.response_rate}%
                             </span>
@@ -572,17 +597,73 @@ export default function AdminDashboard() {
                       {botAnalytics.per_user_activity.length === 0 ? (
                         <TableRow><TableCell colSpan={7} className="h-32 text-center"><EmptyState title="No user activity" description="User bot activity will appear here." className="py-4" /></TableCell></TableRow>
                       ) : botAnalytics.per_user_activity.map((u) => (
-                        <TableRow key={u.chat_id}>
-                          <TableCell className="font-medium">{u.user_name}</TableCell>
-                          <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">{u.user_email}</TableCell>
-                          <TableCell className="text-center font-bold">{u.total_clicks}</TableCell>
-                          <TableCell className="text-center font-medium text-emerald-600 dark:text-emerald-400">{u.applied}</TableCell>
-                          <TableCell className="text-center font-medium text-red-500">{u.not_interested}</TableCell>
-                          <TableCell className="text-center font-medium text-amber-500">{u.remind}</TableCell>
-                          <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                            {u.last_active ? formatDate(u.last_active) : "--"}
-                          </TableCell>
-                        </TableRow>
+                        <React.Fragment key={u.chat_id}>
+                          <TableRow
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => fetchUserDetail(u.chat_id)}
+                          >
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-1">
+                                {expandedUser === u.chat_id ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                                {u.user_name}
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">{u.user_email}</TableCell>
+                            <TableCell className="text-center font-bold">{u.total_clicks}</TableCell>
+                            <TableCell className="text-center font-medium text-emerald-600 dark:text-emerald-400">{u.applied}</TableCell>
+                            <TableCell className="text-center font-medium text-red-500">{u.not_interested}</TableCell>
+                            <TableCell className="text-center font-medium text-amber-500">{u.remind}</TableCell>
+                            <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
+                              {u.last_active ? formatDate(u.last_active) : "--"}
+                            </TableCell>
+                          </TableRow>
+                          {expandedUser === u.chat_id && (
+                            <TableRow>
+                              <TableCell colSpan={7} className="p-0 border-0">
+                                <div className="bg-muted/30 border-l-4 border-primary/40 px-4 py-3 mx-2 mb-2 rounded-md">
+                                  {userDetailLoading ? (
+                                    <div className="flex items-center gap-2 text-muted-foreground py-4 justify-center">
+                                      <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                      Loading responses...
+                                    </div>
+                                  ) : userDetail && userDetail.responses.length > 0 ? (
+                                    <div>
+                                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                                        <Eye className="h-4 w-4 text-primary" />
+                                        {u.user_name}'s Job Responses ({userDetail.responses.length})
+                                      </h4>
+                                      <div className="space-y-1.5">
+                                        {userDetail.responses.map((r, i) => (
+                                          <div key={i} className="flex items-center justify-between bg-background/60 rounded-md px-3 py-2 text-sm border">
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                              {r.response === 'applied' && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
+                                              {r.response === 'not_interested' && <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
+                                              {r.response === 'remind' && <Bell className="h-4 w-4 text-amber-500 shrink-0" />}
+                                              <span className="truncate font-medium">{r.job_title || 'Unknown Job'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3 shrink-0 ml-3">
+                                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.response === 'applied' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                                  r.response === 'not_interested' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                                    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                                }`}>
+                                                {r.response === 'applied' ? '✅ Applied' : r.response === 'not_interested' ? '❌ Not Interested' : '🔔 Remind'}
+                                              </span>
+                                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                {r.responded_at ? formatDate(r.responded_at) : ''}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground py-2 text-center">No detailed responses recorded yet.</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>

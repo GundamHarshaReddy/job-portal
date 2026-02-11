@@ -955,6 +955,50 @@ async def get_bot_analytics(request: Request):
         "daily_activity": daily_activity
     }
 
+@api_router.get("/admin/bot-analytics/user/{chat_id}")
+async def get_user_bot_detail(chat_id: str, request: Request):
+    await require_admin(request)
+    
+    # Get all job responses for this user
+    responses = await db.job_responses.find(
+        {"chat_id": chat_id}, {"_id": 0}
+    ).sort("responded_at", -1).to_list(100)
+    
+    # Enrich with job titles
+    detailed = []
+    for r in responses:
+        job_title = r.get("job_title", "")
+        if not job_title and r.get("job_id"):
+            job = await db.jobs.find_one({"id": r["job_id"]}, {"_id": 0, "title": 1, "company": 1})
+            if job:
+                job_title = f"{job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}"
+        detailed.append({
+            "job_id": r.get("job_id", ""),
+            "job_title": job_title,
+            "response": r.get("response", ""),
+            "responded_at": r.get("responded_at", "")
+        })
+    
+    # Get recent bot events for this user
+    events = await db.bot_events.find(
+        {"chat_id": chat_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    recent_events = []
+    for ev in events:
+        recent_events.append({
+            "event_type": ev.get("event_type", ""),
+            "action": ev.get("action", ""),
+            "job_title": ev.get("job_title", ""),
+            "metadata": ev.get("metadata", {}),
+            "created_at": ev.get("created_at", "")
+        })
+    
+    return {
+        "responses": detailed,
+        "events": recent_events
+    }
+
 # Include router and middleware
 app.include_router(api_router)
 

@@ -135,6 +135,35 @@ async def require_admin(request: Request) -> dict:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
+# ---- Bot Event Logger ----
+async def log_bot_event(
+    event_type: str,
+    chat_id: str = "",
+    user_email: str = "",
+    user_name: str = "",
+    job_id: str = "",
+    job_title: str = "",
+    action: str = "",
+    metadata: Optional[dict] = None
+):
+    """Log a bot interaction event for analytics."""
+    try:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "event_type": event_type,
+            "chat_id": chat_id,
+            "user_email": user_email,
+            "user_name": user_name,
+            "job_id": job_id,
+            "job_title": job_title,
+            "action": action,
+            "metadata": metadata or {},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.bot_events.insert_one(doc)
+    except Exception as e:
+        logger.error(f"Failed to log bot event: {e}")
+
 # ---- Telegram Helpers ----
 async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[dict] = None):
     """Send a Telegram message, optionally with inline keyboard buttons."""
@@ -195,17 +224,25 @@ def build_job_buttons(job_id: str) -> dict:
         ]
     }
 
-async def notify_all_users_new_job(text: str, job_id: str):
+async def notify_all_users_new_job(text: str, job_id: str, job_title: str = ""):
     """Send a new job notification with inline buttons to all linked users."""
     users = await db.users.find(
         {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
-        {"_id": 0, "telegram_chat_id": 1}
+        {"_id": 0, "telegram_chat_id": 1, "email": 1, "name": 1}
     ).to_list(1000)
     buttons = build_job_buttons(job_id)
     for user in users:
         chat_id = user.get("telegram_chat_id")
         if chat_id:
             await send_telegram_message(chat_id, text, reply_markup=buttons)
+            await log_bot_event(
+                event_type="job_notification_sent",
+                chat_id=chat_id,
+                user_email=user.get("email", ""),
+                user_name=user.get("name", ""),
+                job_id=job_id,
+                job_title=job_title
+            )
 
 async def check_deadlines():
     """Check for jobs with upcoming deadlines and notify all users except those who opted out."""
@@ -281,6 +318,13 @@ async def check_deadlines():
                     "job_id": job_id,
                     "sent_at": now.isoformat()
                 })
+                # Log bot event for analytics
+                await log_bot_event(
+                    event_type="reminder_sent",
+                    chat_id=chat_id,
+                    job_id=job_id,
+                    job_title=f"{job['role']} at {job['company_name']}"
+                )
         except Exception as e:
             logger.error(f"Deadline check error for job {job.get('id', '?')}: {e}")
 
@@ -293,6 +337,9 @@ async def startup():
     await db.jobs.create_index("id", unique=True)
     await db.job_responses.create_index([("chat_id", 1), ("job_id", 1)], unique=True)
     await db.reminder_log.create_index([("chat_id", 1), ("job_id", 1), ("sent_at", 1)])
+    await db.bot_events.create_index("created_at")
+    await db.bot_events.create_index("event_type")
+    await db.bot_events.create_index("chat_id")
     
     # Seed admin
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@friendboard.com')
@@ -437,7 +484,7 @@ async def create_job(data: JobCreate, request: Request):
         f"Apply: {data.apply_link}"
     )
     # Fire and forget — send with inline buttons
-    asyncio.create_task(notify_all_users_new_job(msg, job_doc["id"]))
+    asyncio.create_task(notify_all_users_new_job(msg, job_doc["id"], job_title=f"{data.role} at {data.company_name}"))
     
     return {
         "id": job_doc["id"],
@@ -554,7 +601,7 @@ async def broadcast_message(data: BroadcastMessage, request: Request):
     
     users = await db.users.find(
         {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
-        {"_id": 0, "telegram_chat_id": 1}
+        {"_id": 0, "telegram_chat_id": 1, "email": 1, "name": 1}
     ).to_list(1000)
     
     sent_count: int = 0
@@ -565,6 +612,13 @@ async def broadcast_message(data: BroadcastMessage, request: Request):
             try:
                 await send_telegram_message(chat_id, data.message)
                 sent_count += 1
+                await log_bot_event(
+                    event_type="broadcast_sent",
+                    chat_id=chat_id,
+                    user_email=user.get("email", ""),
+                    user_name=user.get("name", ""),
+                    metadata={"message_preview": data.message[:100]}
+                )
             except Exception as e:
                 logger.error(f"Failed to send to chat_id {chat_id}: {e}")
                 failed_count += 1
@@ -590,14 +644,17 @@ async def telegram_webhook(request: Request):
                 
                 if not user:
                     await send_telegram_message(chat_id, "\u274c Could not find an account with that email. Make sure admin has created your account first.")
+                    await log_bot_event(event_type="link_failed", chat_id=chat_id, user_email=email, metadata={"reason": "email_not_found"})
                 elif user.get("telegram_chat_id") and user["telegram_chat_id"] == chat_id:
                     # Same user re-linking from the same account
                     await send_telegram_message(chat_id, "\u2705 Your Telegram is already linked to FriendBoard!")
+                    await log_bot_event(event_type="command_start", chat_id=chat_id, user_email=email, user_name=user.get("name", ""), metadata={"reason": "already_linked"})
                 elif user.get("telegram_chat_id") and user["telegram_chat_id"] != chat_id:
                     # Someone else trying to hijack this email's Telegram link
                     await send_telegram_message(chat_id, "\u26d4 This email is already linked to another Telegram account. If this is your email, please contact the admin to unlink it first.")
                     # Notify the original linked user about the attempt
                     await send_telegram_message(user["telegram_chat_id"], f"\u26a0\ufe0f <b>Security Alert:</b> Someone tried to re-link your FriendBoard account ({email}) from a different Telegram account. If this wasn't you, no action is needed — your link is safe.")
+                    await log_bot_event(event_type="link_failed", chat_id=chat_id, user_email=email, metadata={"reason": "hijack_attempt"})
                 else:
                     # First time linking — no existing chat_id
                     await db.users.update_one(
@@ -605,17 +662,56 @@ async def telegram_webhook(request: Request):
                         {"$set": {"telegram_chat_id": chat_id}}
                     )
                     await send_telegram_message(chat_id, "\u2705 Your Telegram is now linked to FriendBoard! You'll receive job notifications here.")
+                    await log_bot_event(event_type="link_success", chat_id=chat_id, user_email=email, user_name=user.get("name", ""))
             else:
                 await send_telegram_message(
                     chat_id,
                     "\U0001f44b <b>Welcome to FriendBoard Bot!</b>\n\n"
                     "To link your account, use:\n"
                     "<code>/start your@email.com</code>\n\n"
+                    "To unlink and stop notifications:\n"
+                    "<code>/stop your@email.com</code>\n\n"
                     "Once linked, you'll receive job notifications with these options:\n"
                     "\u2705 <b>Applied</b> — stop reminders for that job\n"
                     "\u274c <b>Not Interested</b> — stop reminders for that job\n"
                     "\U0001f514 <b>Remind Me Later</b> — get reminders until the deadline"
                 )
+                await log_bot_event(event_type="command_start", chat_id=chat_id, metadata={"reason": "no_email_provided"})
+        
+        elif text.startswith("/stop"):
+            parts = text.split(" ")
+            if len(parts) > 1:
+                email = parts[1]
+                user = await db.users.find_one({"email": email}, {"_id": 0})
+                
+                if not user:
+                    await send_telegram_message(chat_id, "\u274c No account found with that email.")
+                elif not user.get("telegram_chat_id"):
+                    await send_telegram_message(chat_id, "\u2139\ufe0f This account doesn't have Telegram linked.")
+                elif user["telegram_chat_id"] != chat_id:
+                    await send_telegram_message(chat_id, "\u26d4 You can only unlink from the same Telegram account that was linked.")
+                else:
+                    await db.users.update_one(
+                        {"email": email},
+                        {"$set": {"telegram_chat_id": None}}
+                    )
+                    await send_telegram_message(chat_id, "\u2705 Telegram unlinked! You will no longer receive notifications.\n\nTo re-link, use:\n<code>/start " + email + "</code>")
+                    await log_bot_event(event_type="unlink_success", chat_id=chat_id, user_email=email, user_name=user.get("name", ""))
+            else:
+                await send_telegram_message(chat_id, "\u2139\ufe0f To stop notifications, use:\n<code>/stop your@email.com</code>")
+        
+        elif text.startswith("/status"):
+            user = await db.users.find_one({"telegram_chat_id": chat_id}, {"_id": 0, "email": 1, "name": 1})
+            if user:
+                await send_telegram_message(
+                    chat_id,
+                    f"\u2705 <b>Linked Account</b>\n\n"
+                    f"Name: <b>{user.get('name', 'N/A')}</b>\n"
+                    f"Email: <code>{user['email']}</code>\n\n"
+                    f"To unlink, use:\n<code>/stop {user['email']}</code>"
+                )
+            else:
+                await send_telegram_message(chat_id, "\u274c No account is linked to this Telegram chat.\n\nTo link, use:\n<code>/start your@email.com</code>")
     
     # Handle inline button clicks (callback queries)
     if "callback_query" in data:
@@ -640,6 +736,19 @@ async def telegram_webhook(request: Request):
                         "responded_at": datetime.now(timezone.utc).isoformat()
                     }},
                     upsert=True
+                )
+                
+                # Resolve user + job info for the event log
+                btn_user = await db.users.find_one({"telegram_chat_id": chat_id}, {"_id": 0, "email": 1, "name": 1})
+                btn_job = await db.jobs.find_one({"id": job_id}, {"_id": 0, "role": 1, "company_name": 1})
+                await log_bot_event(
+                    event_type="button_click",
+                    chat_id=chat_id,
+                    user_email=btn_user.get("email", "") if btn_user else "",
+                    user_name=btn_user.get("name", "") if btn_user else "",
+                    job_id=job_id,
+                    job_title=f"{btn_job['role']} at {btn_job['company_name']}" if btn_job else "",
+                    action=action
                 )
                 
                 # Build confirmation and edit the original message
@@ -689,6 +798,161 @@ async def get_stats(request: Request):
         "total_friends": total_friends,
         "total_jobs": total_jobs,
         "today_jobs": today_jobs
+    }
+
+# ---- Bot Analytics ----
+@api_router.get("/admin/bot-analytics")
+async def get_bot_analytics(request: Request):
+    await require_admin(request)
+    now = datetime.now(timezone.utc)
+
+    # --- Overview ---
+    total_users = await db.users.count_documents({})
+    total_linked = await db.users.count_documents(
+        {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]}
+    )
+    total_bot_events = await db.bot_events.count_documents({})
+    total_button_clicks = await db.bot_events.count_documents({"event_type": "button_click"})
+    total_jobs_notified = await db.bot_events.count_documents({"event_type": "job_notification_sent"})
+    total_broadcasts = await db.bot_events.count_documents({"event_type": "broadcast_sent"})
+    total_reminders = await db.bot_events.count_documents({"event_type": "reminder_sent"})
+
+    # --- Response breakdown from job_responses ---
+    response_pipeline = [
+        {"$group": {"_id": "$response", "count": {"$sum": 1}}}
+    ]
+    response_agg = await db.job_responses.aggregate(response_pipeline).to_list(10)
+    response_breakdown = {"applied": 0, "not_interested": 0, "remind": 0}
+    for r in response_agg:
+        if r["_id"] in response_breakdown:
+            response_breakdown[r["_id"]] = r["count"]
+
+    # --- Per-job responses ---
+    all_jobs = await db.jobs.find({}, {"_id": 0, "id": 1, "role": 1, "company_name": 1}).sort("created_at", -1).to_list(200)
+    per_job_responses = []
+    for job in all_jobs:
+        job_id = job["id"]
+        job_title = f"{job['role']} at {job['company_name']}"
+        # Count how many notifications were sent for this job
+        notified_count = await db.bot_events.count_documents({"event_type": "job_notification_sent", "job_id": job_id})
+        if notified_count == 0:
+            # Fallback: estimate from linked users at the time
+            notified_count = total_linked
+        # Get responses for this job
+        job_resp_pipeline = [
+            {"$match": {"job_id": job_id}},
+            {"$group": {"_id": "$response", "count": {"$sum": 1}}}
+        ]
+        job_resp_agg = await db.job_responses.aggregate(job_resp_pipeline).to_list(10)
+        applied = 0
+        not_interested = 0
+        remind = 0
+        for r in job_resp_agg:
+            if r["_id"] == "applied":
+                applied = r["count"]
+            elif r["_id"] == "not_interested":
+                not_interested = r["count"]
+            elif r["_id"] == "remind":
+                remind = r["count"]
+        total_responded = applied + not_interested + remind
+        no_response = max(0, notified_count - total_responded)
+        rate = round((total_responded / notified_count * 100), 1) if notified_count > 0 else 0
+        per_job_responses.append({
+            "job_id": job_id,
+            "job_title": job_title,
+            "company": job["company_name"],
+            "total_notified": notified_count,
+            "applied": applied,
+            "not_interested": not_interested,
+            "remind": remind,
+            "no_response": no_response,
+            "response_rate": rate
+        })
+
+    # --- Per-user activity from job_responses ---
+    user_pipeline = [
+        {"$group": {
+            "_id": "$chat_id",
+            "total_clicks": {"$sum": 1},
+            "applied": {"$sum": {"$cond": [{"$eq": ["$response", "applied"]}, 1, 0]}},
+            "not_interested": {"$sum": {"$cond": [{"$eq": ["$response", "not_interested"]}, 1, 0]}},
+            "remind": {"$sum": {"$cond": [{"$eq": ["$response", "remind"]}, 1, 0]}},
+            "last_active": {"$max": "$responded_at"}
+        }}
+    ]
+    user_agg = await db.job_responses.aggregate(user_pipeline).to_list(100)
+    per_user_activity = []
+    for u in user_agg:
+        chat_id = u["_id"]
+        user_doc = await db.users.find_one({"telegram_chat_id": chat_id}, {"_id": 0, "name": 1, "email": 1})
+        per_user_activity.append({
+            "user_name": user_doc.get("name", "Unknown") if user_doc else "Unknown",
+            "user_email": user_doc.get("email", "") if user_doc else "",
+            "chat_id": chat_id,
+            "total_clicks": u["total_clicks"],
+            "applied": u["applied"],
+            "not_interested": u["not_interested"],
+            "remind": u["remind"],
+            "last_active": u.get("last_active", "")
+        })
+    per_user_activity.sort(key=lambda x: x["total_clicks"], reverse=True)
+
+    # --- Recent events (last 100) ---
+    recent_events_raw = await db.bot_events.find(
+        {}, {"_id": 0, "id": 0, "metadata": 0}
+    ).sort("created_at", -1).to_list(100)
+    recent_events = []
+    for ev in recent_events_raw:
+        recent_events.append({
+            "event_type": ev.get("event_type", ""),
+            "user_name": ev.get("user_name", ""),
+            "user_email": ev.get("user_email", ""),
+            "action": ev.get("action", ""),
+            "job_title": ev.get("job_title", ""),
+            "chat_id": ev.get("chat_id", ""),
+            "created_at": ev.get("created_at", "")
+        })
+
+    # --- Daily activity (last 30 days) ---
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    daily_pipeline = [
+        {"$match": {"created_at": {"$gte": thirty_days_ago}}},
+        {"$addFields": {"date": {"$substr": ["$created_at", 0, 10]}}},
+        {"$group": {
+            "_id": "$date",
+            "clicks": {"$sum": {"$cond": [{"$eq": ["$event_type", "button_click"]}, 1, 0]}},
+            "notifications": {"$sum": {"$cond": [{"$eq": ["$event_type", "job_notification_sent"]}, 1, 0]}},
+            "reminders": {"$sum": {"$cond": [{"$eq": ["$event_type", "reminder_sent"]}, 1, 0]}},
+            "total": {"$sum": 1}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+    daily_agg = await db.bot_events.aggregate(daily_pipeline).to_list(31)
+    daily_activity = []
+    for d in daily_agg:
+        daily_activity.append({
+            "date": d["_id"],
+            "clicks": d["clicks"],
+            "notifications": d["notifications"],
+            "reminders": d["reminders"],
+            "total": d["total"]
+        })
+
+    return {
+        "overview": {
+            "total_linked_users": total_linked,
+            "total_users": total_users,
+            "total_bot_events": total_bot_events,
+            "total_button_clicks": total_button_clicks,
+            "total_jobs_notified": total_jobs_notified,
+            "total_broadcasts_sent": total_broadcasts,
+            "total_reminders_sent": total_reminders
+        },
+        "response_breakdown": response_breakdown,
+        "per_job_responses": per_job_responses,
+        "per_user_activity": per_user_activity,
+        "recent_events": recent_events,
+        "daily_activity": daily_activity
     }
 
 # Include router and middleware

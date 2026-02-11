@@ -546,6 +546,9 @@ async def delete_job(job_id: str, request: Request):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.jobs.delete_one({"id": job_id})
+    # Cascade: clean up related responses and bot events
+    await db.job_responses.delete_many({"job_id": job_id})
+    await db.bot_events.delete_many({"job_id": job_id})
     return {"message": "Job deleted"}
 
 # ---- Rankings ----

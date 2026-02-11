@@ -39,6 +39,16 @@ import {
   UserPlus,
   Send,
   MessageSquare,
+  Bot,
+  Activity,
+  MousePointerClick,
+  Link2,
+  Radio,
+  Bell,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  BarChart3,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
@@ -57,6 +67,8 @@ export default function AdminDashboard() {
   const [deleting, setDeleting] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
+  const [botAnalytics, setBotAnalytics] = useState(null);
+  const [botLoading, setBotLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     const headers = { Authorization: `Bearer ${token}` };
@@ -73,6 +85,18 @@ export default function AdminDashboard() {
       toast.error("Failed to load dashboard data");
     }
     setLoading(false);
+  }, [token]);
+
+  const fetchBotAnalytics = useCallback(async () => {
+    setBotLoading(true);
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.get(`${API}/admin/bot-analytics`, { headers });
+      setBotAnalytics(res.data);
+    } catch {
+      // silently fail — tab will show empty state
+    }
+    setBotLoading(false);
   }, [token]);
 
   useEffect(() => {
@@ -205,7 +229,7 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <Tabs defaultValue="users" data-testid="admin-tabs">
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="users" data-testid="admin-tab-users">
             <Users className="h-4 w-4 mr-2" /> Users ({users.length})
           </TabsTrigger>
@@ -214,6 +238,9 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="broadcast" data-testid="admin-tab-broadcast">
             <MessageSquare className="h-4 w-4 mr-2" /> Broadcast
+          </TabsTrigger>
+          <TabsTrigger value="bot-analytics" data-testid="admin-tab-bot-analytics" onClick={() => { if (!botAnalytics) fetchBotAnalytics(); }}>
+            <Bot className="h-4 w-4 mr-2" /> Bot Analytics
           </TabsTrigger>
         </TabsList>
 
@@ -398,6 +425,297 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Bot Analytics Tab */}
+        <TabsContent value="bot-analytics" className="mt-4 space-y-6">
+          {botLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+            </div>
+          ) : !botAnalytics ? (
+            <Card><CardContent className="py-12"><EmptyState title="No analytics data yet" description="Analytics will appear once users start interacting with the Telegram bot." /></CardContent></Card>
+          ) : (
+            <>
+              {/* Overview Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: "Linked Users", value: `${botAnalytics.overview.total_linked_users}/${botAnalytics.overview.total_users}`, icon: Link2, color: "text-blue-500" },
+                  { label: "Button Clicks", value: botAnalytics.overview.total_button_clicks, icon: MousePointerClick, color: "text-violet-500" },
+                  { label: "Broadcasts Sent", value: botAnalytics.overview.total_broadcasts_sent, icon: Radio, color: "text-emerald-500" },
+                  { label: "Reminders Sent", value: botAnalytics.overview.total_reminders_sent, icon: Bell, color: "text-amber-500" },
+                ].map((s, i) => (
+                  <Card key={s.label} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">{s.label}</p>
+                          <p className="text-2xl font-bold mt-1">
+                            {typeof s.value === "number" ? <AnimatedCounter value={s.value} /> : s.value}
+                          </p>
+                        </div>
+                        <div className={`h-10 w-10 rounded-xl bg-muted flex items-center justify-center ${s.color}`}>
+                          <s.icon className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Response Breakdown Bar */}
+              {(() => {
+                const bd = botAnalytics.response_breakdown;
+                const total = bd.applied + bd.not_interested + bd.remind;
+                if (total === 0) return null;
+                const items = [
+                  { key: "applied", label: "Applied", count: bd.applied, color: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+                  { key: "not_interested", label: "Not Interested", count: bd.not_interested, color: "bg-red-400", icon: <XCircle className="h-3.5 w-3.5" /> },
+                  { key: "remind", label: "Remind Later", count: bd.remind, color: "bg-amber-400", icon: <Clock className="h-3.5 w-3.5" /> },
+                ];
+                return (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-primary" /> Response Breakdown
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Stacked bar */}
+                      <div className="w-full h-5 rounded-full overflow-hidden flex bg-muted">
+                        {items.map(it => {
+                          const pct = (it.count / total * 100).toFixed(1);
+                          return pct > 0 ? <div key={it.key} className={`${it.color} transition-all duration-700`} style={{ width: `${pct}%` }} title={`${it.label}: ${pct}%`} /> : null;
+                        })}
+                      </div>
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-4">
+                        {items.map(it => (
+                          <div key={it.key} className="flex items-center gap-1.5 text-sm">
+                            <div className={`w-3 h-3 rounded-sm ${it.color}`} />
+                            <span className="flex items-center gap-1">{it.icon} {it.label}</span>
+                            <span className="font-semibold">{it.count}</span>
+                            <span className="text-muted-foreground">({(it.count / total * 100).toFixed(0)}%)</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Per-Job Response Table */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Per-Job Responses</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Job</TableHead>
+                        <TableHead className="hidden sm:table-cell">Company</TableHead>
+                        <TableHead className="text-center">Notified</TableHead>
+                        <TableHead className="text-center">✅</TableHead>
+                        <TableHead className="text-center">❌</TableHead>
+                        <TableHead className="text-center">🔔</TableHead>
+                        <TableHead className="text-center hidden sm:table-cell">No Reply</TableHead>
+                        <TableHead className="text-center">Rate</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {botAnalytics.per_job_responses.length === 0 ? (
+                        <TableRow><TableCell colSpan={8} className="h-32 text-center"><EmptyState title="No job data" description="Job responses will appear here." className="py-4" /></TableCell></TableRow>
+                      ) : botAnalytics.per_job_responses.map((j) => (
+                        <TableRow key={j.job_id}>
+                          <TableCell className="font-medium max-w-[200px] truncate">{j.job_title}</TableCell>
+                          <TableCell className="hidden sm:table-cell text-muted-foreground">{j.company}</TableCell>
+                          <TableCell className="text-center">{j.total_notified}</TableCell>
+                          <TableCell className="text-center font-medium text-emerald-600 dark:text-emerald-400">{j.applied}</TableCell>
+                          <TableCell className="text-center font-medium text-red-500">{j.not_interested}</TableCell>
+                          <TableCell className="text-center font-medium text-amber-500">{j.remind}</TableCell>
+                          <TableCell className="text-center hidden sm:table-cell text-muted-foreground">{j.no_response}</TableCell>
+                          <TableCell className="text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-semibold ${j.response_rate >= 70 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                : j.response_rate >= 40 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  : "bg-red-500/10 text-red-500"
+                              }`}>
+                              {j.response_rate}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Per-User Activity Table */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Per-User Activity</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead className="hidden sm:table-cell">Email</TableHead>
+                        <TableHead className="text-center">Total</TableHead>
+                        <TableHead className="text-center">✅</TableHead>
+                        <TableHead className="text-center">❌</TableHead>
+                        <TableHead className="text-center">🔔</TableHead>
+                        <TableHead className="hidden sm:table-cell">Last Active</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {botAnalytics.per_user_activity.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="h-32 text-center"><EmptyState title="No user activity" description="User bot activity will appear here." className="py-4" /></TableCell></TableRow>
+                      ) : botAnalytics.per_user_activity.map((u) => (
+                        <TableRow key={u.chat_id}>
+                          <TableCell className="font-medium">{u.user_name}</TableCell>
+                          <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">{u.user_email}</TableCell>
+                          <TableCell className="text-center font-bold">{u.total_clicks}</TableCell>
+                          <TableCell className="text-center font-medium text-emerald-600 dark:text-emerald-400">{u.applied}</TableCell>
+                          <TableCell className="text-center font-medium text-red-500">{u.not_interested}</TableCell>
+                          <TableCell className="text-center font-medium text-amber-500">{u.remind}</TableCell>
+                          <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
+                            {u.last_active ? formatDate(u.last_active) : "--"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Daily Activity Chart */}
+              {botAnalytics.daily_activity.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Activity className="h-5 w-5 text-primary" /> Daily Bot Activity (Last 30 Days)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-end gap-1 h-40 overflow-x-auto pb-6 relative">
+                      {(() => {
+                        const maxVal = Math.max(...botAnalytics.daily_activity.map(d => d.total), 1);
+                        return botAnalytics.daily_activity.map((d, i) => (
+                          <div key={d.date} className="flex flex-col items-center flex-1 min-w-[18px] group relative">
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-popover text-popover-foreground border shadow-lg rounded-md px-2 py-1 text-xs whitespace-nowrap z-10 pointer-events-none">
+                              <div className="font-semibold">{d.date}</div>
+                              <div>Clicks: {d.clicks} · Notifs: {d.notifications} · Rem: {d.reminders}</div>
+                            </div>
+                            <div
+                              className="w-full rounded-t-sm bg-gradient-to-t from-primary/80 to-primary transition-all duration-500 hover:from-primary hover:to-primary/90 cursor-pointer"
+                              style={{ height: `${Math.max((d.total / maxVal) * 100, 4)}%`, animationDelay: `${i * 30}ms` }}
+                            />
+                            <span className="text-[10px] text-muted-foreground mt-1 -rotate-45 origin-top-left absolute -bottom-5 left-1/2">
+                              {d.date.slice(5)}
+                            </span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    <div className="flex gap-4 mt-4 text-xs text-muted-foreground">
+                      <span>📊 Hover bars for details</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Recent Activity Feed */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-primary" /> Recent Bot Activity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {botAnalytics.recent_events.length === 0 ? (
+                    <EmptyState title="No recent events" description="Bot events will appear here in real time." />
+                  ) : (
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                      {botAnalytics.recent_events.map((ev, i) => {
+                        let icon, text, dotColor;
+                        const name = ev.user_name || ev.user_email || `Chat ${ev.chat_id?.slice(-4)}`;
+                        switch (ev.event_type) {
+                          case "button_click":
+                            icon = ev.action === "applied" ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              : ev.action === "not_interested" ? <XCircle className="h-4 w-4 text-red-400" />
+                                : <Clock className="h-4 w-4 text-amber-400" />;
+                            text = <><span className="font-medium">{name}</span> clicked <span className="font-semibold">{ev.action === "applied" ? "✅ Applied" : ev.action === "not_interested" ? "❌ Not Interested" : "🔔 Remind"}</span> on <span className="font-medium">{ev.job_title || "a job"}</span></>;
+                            dotColor = ev.action === "applied" ? "bg-emerald-500" : ev.action === "not_interested" ? "bg-red-400" : "bg-amber-400";
+                            break;
+                          case "link_success":
+                            icon = <Link2 className="h-4 w-4 text-blue-500" />;
+                            text = <><span className="font-medium">{name}</span> linked their Telegram</>;
+                            dotColor = "bg-blue-500";
+                            break;
+                          case "link_failed":
+                            icon = <XCircle className="h-4 w-4 text-red-400" />;
+                            text = <><span className="font-medium">{ev.user_email || "Someone"}</span> failed to link Telegram</>;
+                            dotColor = "bg-red-400";
+                            break;
+                          case "broadcast_sent":
+                            icon = <Radio className="h-4 w-4 text-violet-500" />;
+                            text = <>Broadcast sent to <span className="font-medium">{name}</span></>;
+                            dotColor = "bg-violet-500";
+                            break;
+                          case "reminder_sent":
+                            icon = <Bell className="h-4 w-4 text-amber-500" />;
+                            text = <>Reminder sent for <span className="font-medium">{ev.job_title || "a job"}</span></>;
+                            dotColor = "bg-amber-500";
+                            break;
+                          case "job_notification_sent":
+                            icon = <Send className="h-4 w-4 text-blue-500" />;
+                            text = <>Job notification sent to <span className="font-medium">{name}</span> for <span className="font-medium">{ev.job_title || "a job"}</span></>;
+                            dotColor = "bg-blue-500";
+                            break;
+                          case "command_start":
+                            icon = <Bot className="h-4 w-4 text-primary" />;
+                            text = <><span className="font-medium">{name}</span> used /start command</>;
+                            dotColor = "bg-primary";
+                            break;
+                          default:
+                            icon = <Activity className="h-4 w-4 text-muted-foreground" />;
+                            text = <>{ev.event_type}</>;
+                            dotColor = "bg-muted-foreground";
+                        }
+                        const timeAgo = (() => {
+                          try {
+                            const diff = (Date.now() - new Date(ev.created_at).getTime()) / 1000;
+                            if (diff < 60) return "just now";
+                            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+                            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+                            return `${Math.floor(diff / 86400)}d ago`;
+                          } catch { return ""; }
+                        })();
+                        return (
+                          <div key={i} className="flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="mt-0.5 shrink-0">{icon}</div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm leading-relaxed">{text}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{timeAgo}</p>
+                            </div>
+                            <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${dotColor}`} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Refresh button */}
+              <div className="flex justify-center">
+                <Button variant="outline" onClick={fetchBotAnalytics} disabled={botLoading} className="gap-2">
+                  <Activity className="h-4 w-4" /> Refresh Analytics
+                </Button>
+              </div>
+            </>
+          )}
         </TabsContent>
       </Tabs>
 

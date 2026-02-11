@@ -728,26 +728,30 @@ async def telegram_webhook(request: Request):
             action, job_id = parts
             
             if action in ("applied", "not_interested", "remind"):
+                # Look up job info first
+                btn_job = await db.jobs.find_one({"id": job_id}, {"_id": 0, "role": 1, "company_name": 1})
+                job_title_str = f"{btn_job['role']} at {btn_job['company_name']}" if btn_job else ""
+                
                 # Save response (upsert — one response per user per job)
                 await db.job_responses.update_one(
                     {"chat_id": chat_id, "job_id": job_id},
                     {"$set": {
                         "response": action,
+                        "job_title": job_title_str,
                         "responded_at": datetime.now(timezone.utc).isoformat()
                     }},
                     upsert=True
                 )
                 
-                # Resolve user + job info for the event log
+                # Resolve user info for the event log
                 btn_user = await db.users.find_one({"telegram_chat_id": chat_id}, {"_id": 0, "email": 1, "name": 1})
-                btn_job = await db.jobs.find_one({"id": job_id}, {"_id": 0, "role": 1, "company_name": 1})
                 await log_bot_event(
                     event_type="button_click",
                     chat_id=chat_id,
                     user_email=btn_user.get("email", "") if btn_user else "",
                     user_name=btn_user.get("name", "") if btn_user else "",
                     job_id=job_id,
-                    job_title=f"{btn_job['role']} at {btn_job['company_name']}" if btn_job else "",
+                    job_title=job_title_str,
                     action=action
                 )
                 
@@ -969,9 +973,9 @@ async def get_user_bot_detail(chat_id: str, request: Request):
     for r in responses:
         job_title = r.get("job_title", "")
         if not job_title and r.get("job_id"):
-            job = await db.jobs.find_one({"id": r["job_id"]}, {"_id": 0, "title": 1, "company": 1})
+            job = await db.jobs.find_one({"id": r["job_id"]}, {"_id": 0, "role": 1, "company_name": 1})
             if job:
-                job_title = f"{job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}"
+                job_title = f"{job.get('role', 'Unknown')} at {job.get('company_name', 'Unknown')}"
         detailed.append({
             "job_id": r.get("job_id", ""),
             "job_title": job_title,

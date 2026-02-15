@@ -52,6 +52,7 @@ class UserOut(BaseModel):
     name: str
     role: str
     telegram_chat_id: Optional[str] = None
+    is_hidden: bool = False
     created_at: str
 
 class JobCreate(BaseModel):
@@ -90,6 +91,15 @@ class RankingOut(BaseModel):
     name: str
     email: str
     job_count: int
+
+class RankingOut(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    job_count: int
+
+class UserRoleUpdate(BaseModel):
+    role: str  # admin / friend
 
 class TelegramLink(BaseModel):
     telegram_chat_id: str
@@ -458,8 +468,20 @@ async def get_me(request: Request):
         "email": user["email"],
         "name": user["name"],
         "role": user["role"],
-        "telegram_chat_id": user.get("telegram_chat_id")
+        "telegram_chat_id": user.get("telegram_chat_id"),
+        "is_hidden": user.get("is_hidden", False)
     }
+
+@api_router.put("/admin/visibility")
+async def toggle_visibility(request: Request):
+    user = await require_admin(request)
+    new_status = not user.get("is_hidden", False)
+    
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"is_hidden": new_status}}
+    )
+    return {"message": "Visibility updated", "is_hidden": new_status}
 
 # ---- Admin Routes ----
 @api_router.post("/admin/users")
@@ -508,6 +530,53 @@ async def delete_user(user_id: str, request: Request):
     await db.users.delete_one({"id": user_id})
     return {"message": "User deleted"}
 
+@api_router.put("/admin/users/{user_id}/visibility")
+async def toggle_user_visibility(user_id: str, request: Request):
+    await require_admin(request)
+    
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    new_status = not user.get("is_hidden", False)
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"is_hidden": new_status}}
+    )
+    return {"message": f"User visibility updated to {'Hidden' if new_status else 'Visible'}", "is_hidden": new_status}
+
+
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"is_hidden": new_status}}
+    )
+    return {"message": f"User visibility updated to {'Hidden' if new_status else 'Visible'}", "is_hidden": new_status}
+
+@api_router.put("/admin/users/{user_id}/role")
+async def update_user_role(user_id: str, data: UserRoleUpdate, request: Request):
+    current_admin = await require_admin(request)
+    
+    # SUPER ADMIN CHECK
+    if current_admin["email"] != "gundamharsha8@gmail.com":
+        raise HTTPException(status_code=403, detail="Only the Super Admin can change user roles")
+
+    if user_id == current_admin["id"]:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+        
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if data.role not in ["admin", "friend"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'friend'")
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"role": data.role}}
+    )
+    return {"message": f"User role updated to {data.role}", "role": data.role}
+
 
 @api_router.post("/jobs")
 async def create_job(data: JobCreate, request: Request):
@@ -521,8 +590,9 @@ async def create_job(data: JobCreate, request: Request):
         "location": data.location,
         "apply_link": data.apply_link,
         "deadline": data.deadline,
+        "deadline": data.deadline,
         "posted_by": user["id"],
-        "posted_by_name": user["name"],
+        "posted_by_name": "Anonymous" if user.get("is_hidden") else user["name"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source": data.source
     }
@@ -535,7 +605,7 @@ async def create_job(data: JobCreate, request: Request):
         f"Source: {data.source.replace('_', ' ').title()}\n"
         f"Type: {data.job_type} | Location: {data.location}\n"
         f"Deadline: {data.deadline[:10]}\n"
-        f"Posted by: {user['name']}\n"
+        f"Posted by: {'Anonymous' if user.get('is_hidden') else user['name']}\n"
         f"Apply: {data.apply_link}"
     )
     # Fire and forget — send with inline buttons
@@ -628,6 +698,8 @@ async def get_rankings(request: Request):
     # 3. Build rankings list
     rankings = []
     for user in users:
+        if user.get("is_hidden"):
+            continue
         count = job_counts.get(user["id"], 0)
         rankings.append({
             "user_id": user["id"],

@@ -52,14 +52,18 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  EyeOff,
+  Shield,
+  ShieldOff,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { EmptyState } from "@/components/EmptyState";
 
 export default function AdminDashboard() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const [stats, setStats] = useState(null);
+  const [isHidden, setIsHidden] = useState(user?.is_hidden || false);
   const [users, setUsers] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -169,6 +173,32 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleToggleUserVisibility = async (user) => {
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.put(`${API}/admin/users/${user.id}/visibility`, {}, { headers });
+      toast.success(`User is now ${res.data.is_hidden ? "Hidden" : "Visible"}`);
+      fetchData(); // Refresh list to update icon
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update visibility");
+    }
+  };
+
+
+
+
+  const handleUpdateUserRole = async (user, newRole) => {
+    if (!window.confirm(`Are you sure you want to change ${user.name}'s role to ${newRole}?`)) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      await axios.put(`${API}/admin/users/${user.id}/role`, { role: newRole }, { headers });
+      toast.success(`User role updated to ${newRole}`);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update role");
+    }
+  };
+
   const handleDeleteJob = async (job) => {
     if (!window.confirm(`Are you sure you want to delete "${job.role}"?`)) return;
     const headers = { Authorization: `Bearer ${token}` };
@@ -217,6 +247,18 @@ export default function AdminDashboard() {
     setBroadcasting(false);
   };
 
+
+  const handleToggleVisibility = async () => {
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.put(`${API}/admin/visibility`, {}, { headers });
+      setIsHidden(res.data.is_hidden);
+      toast.success(res.data.is_hidden ? "Profile hidden from leaderboard" : "Profile visible on leaderboard");
+    } catch (err) {
+      toast.error("Failed to update visibility");
+    }
+  };
+
   const linkedUsersCount = users.filter((u) => u.telegram_chat_id).length;
 
   if (loading) {
@@ -243,9 +285,19 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-bold tracking-tight" data-testid="admin-heading">Admin Dashboard</h1>
           <p className="text-muted-foreground mt-1">Manage users and monitor activity</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2" data-testid="admin-create-user-btn">
-          <Plus className="h-4 w-4" /> Add Friend
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleToggleVisibility}
+            className="gap-2"
+          >
+            {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {isHidden ? "Hidden" : "Visible"}
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2" data-testid="admin-create-user-btn">
+            <Plus className="h-4 w-4" /> Add Friend
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -295,6 +347,7 @@ export default function AdminDashboard() {
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead className="hidden sm:table-cell">Visibility</TableHead>
                     <TableHead className="hidden sm:table-cell">Telegram</TableHead>
                     <TableHead className="hidden sm:table-cell">Joined</TableHead>
                     <TableHead className="w-12"></TableHead>
@@ -314,6 +367,19 @@ export default function AdminDashboard() {
                         </span>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
+                        {u.is_hidden ? (
+                          <div className="flex items-center gap-1.5 text-amber-500">
+                            <EyeOff className="h-4 w-4" />
+                            <span className="text-xs font-medium">Hidden</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Eye className="h-4 w-4" />
+                            <span className="text-xs">Visible</span>
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         {u.telegram_chat_id ? (
                           <Send className="h-4 w-4 text-emerald-500" />
                         ) : (
@@ -324,24 +390,40 @@ export default function AdminDashboard() {
                         {formatDate(u.created_at)}
                       </TableCell>
                       <TableCell>
-                        {u.role !== "admin" && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`user-menu-${u.id}`}>
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => setDeleteDialog(u)}
-                                data-testid={`user-delete-${u.id}`}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`user-menu-${u.id}`}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleToggleUserVisibility(u)}>
+                              {u.is_hidden ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+                              {u.is_hidden ? "Show on Leaderboard" : "Hide from Leaderboard"}
+                            </DropdownMenuItem>
+                            {user.email === "gundamharsha8@gmail.com" && (
+                              <>
+                                {u.role === "friend" && (
+                                  <DropdownMenuItem onClick={() => handleUpdateUserRole(u, "admin")}>
+                                    <Shield className="h-4 w-4 mr-2 text-indigo-500" /> Promote to Admin
+                                  </DropdownMenuItem>
+                                )}
+                                {u.role === "admin" && u.id !== user.id && (
+                                  <DropdownMenuItem onClick={() => handleUpdateUserRole(u, "friend")}>
+                                    <ShieldOff className="h-4 w-4 mr-2 text-amber-500" /> Demote to Friend
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteDialog(u)}
+                              data-testid={`user-delete-${u.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}

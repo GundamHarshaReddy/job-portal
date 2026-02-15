@@ -69,6 +69,7 @@ export default function AdminDashboard() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState("");
+  const [broadcastFile, setBroadcastFile] = useState(null);
   const [broadcasting, setBroadcasting] = useState(false);
   const [botAnalytics, setBotAnalytics] = useState(null);
   const [botLoading, setBotLoading] = useState(false);
@@ -77,20 +78,25 @@ export default function AdminDashboard() {
   const [userDetailLoading, setUserDetailLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     const headers = { Authorization: `Bearer ${token}` };
     try {
-      const [statsRes, usersRes, jobsRes] = await Promise.all([
+      const [statsRes, usersRes, jobsRes, botStatsRes] = await Promise.all([
         axios.get(`${API}/admin/stats`, { headers }),
         axios.get(`${API}/admin/users`, { headers }),
         axios.get(`${API}/jobs`, { headers }),
+        axios.get(`${API}/admin/bot-analytics`, { headers }),
       ]);
       setStats(statsRes.data);
       setUsers(usersRes.data);
       setJobs(jobsRes.data);
-    } catch {
+      setBotAnalytics(botStatsRes.data);
+    } catch (err) {
       toast.error("Failed to load dashboard data");
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [token]);
 
   const fetchBotAnalytics = useCallback(async () => {
@@ -99,30 +105,32 @@ export default function AdminDashboard() {
     try {
       const res = await axios.get(`${API}/admin/bot-analytics`, { headers });
       setBotAnalytics(res.data);
-    } catch {
-      // silently fail — tab will show empty state
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load bot analytics");
+    } finally {
+      setBotLoading(false);
     }
-    setBotLoading(false);
   }, [token]);
 
-  const fetchUserDetail = useCallback(async (chatId) => {
+  const fetchUserDetail = async (chatId) => {
     if (expandedUser === chatId) {
       setExpandedUser(null);
-      setUserDetail(null);
       return;
     }
     setExpandedUser(chatId);
     setUserDetailLoading(true);
-    setUserDetail(null);
     const headers = { Authorization: `Bearer ${token}` };
     try {
       const res = await axios.get(`${API}/admin/bot-analytics/user/${chatId}`, { headers });
       setUserDetail(res.data);
-    } catch {
-      setUserDetail({ responses: [], events: [] });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load user details");
+    } finally {
+      setUserDetailLoading(false);
     }
-    setUserDetailLoading(false);
-  }, [token, expandedUser]);
+  };
 
   useEffect(() => {
     fetchData();
@@ -130,23 +138,19 @@ export default function AdminDashboard() {
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!newUser.email || !newUser.password || !newUser.name) {
-      toast.error("Please fill in all fields");
-      return;
-    }
     setCreating(true);
     const headers = { Authorization: `Bearer ${token}` };
     try {
-      const res = await axios.post(`${API}/admin/users`, newUser, { headers });
-      setUsers((prev) => [...prev, res.data]);
-      setStats((prev) => prev ? { ...prev, total_users: prev.total_users + 1, total_friends: prev.total_friends + 1 } : prev);
-      toast.success(`Account created for ${newUser.name}`);
-      setNewUser({ email: "", password: "", name: "" });
+      await axios.post(`${API}/admin/users`, newUser, { headers });
+      toast.success("User created successfully");
       setCreateOpen(false);
+      setNewUser({ email: "", password: "", name: "" });
+      fetchData();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to create user");
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   const handleDeleteUser = async () => {
@@ -155,34 +159,35 @@ export default function AdminDashboard() {
     const headers = { Authorization: `Bearer ${token}` };
     try {
       await axios.delete(`${API}/admin/users/${deleteDialog.id}`, { headers });
-      setUsers((prev) => prev.filter((u) => u.id !== deleteDialog.id));
-      setStats((prev) => prev ? { ...prev, total_users: prev.total_users - 1, total_friends: prev.total_friends - 1 } : prev);
       toast.success("User deleted");
       setDeleteDialog(null);
+      fetchData();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to delete user");
+    } finally {
+      setDeleting(false);
     }
-    setDeleting(false);
   };
 
   const handleDeleteJob = async (job) => {
+    if (!window.confirm(`Are you sure you want to delete "${job.role}"?`)) return;
     const headers = { Authorization: `Bearer ${token}` };
     try {
       await axios.delete(`${API}/jobs/${job.id}`, { headers });
-      setJobs((prev) => prev.filter((j) => j.id !== job.id));
-      setStats((prev) => prev ? { ...prev, total_jobs: prev.total_jobs - 1 } : prev);
       toast.success("Job deleted");
-    } catch {
-      toast.error("Failed to delete job");
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete job");
     }
   };
 
   const formatDate = (dateStr) => {
-    try {
-      return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    } catch {
-      return dateStr;
-    }
+    if (!dateStr) return "";
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   };
 
   const handleBroadcast = async () => {
@@ -193,9 +198,19 @@ export default function AdminDashboard() {
     setBroadcasting(true);
     const headers = { Authorization: `Bearer ${token}` };
     try {
-      const res = await axios.post(`${API}/admin/broadcast`, { message: broadcastMsg }, { headers });
+      const formData = new FormData();
+      formData.append("message", broadcastMsg);
+      if (broadcastFile) {
+        formData.append("photo", broadcastFile);
+      }
+
+      const res = await axios.post(`${API}/admin/broadcast`, formData, { headers });
       toast.success(`Broadcast sent to ${res.data.sent_count} user(s)!`);
       setBroadcastMsg("");
+      setBroadcastFile(null);
+      // Reset file input manually if needed, or rely on key change/re-render
+      const fileInput = document.getElementById("broadcast-photo");
+      if (fileInput) fileInput.value = "";
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send broadcast");
     }
@@ -213,11 +228,13 @@ export default function AdminDashboard() {
   }
 
   const statCards = [
-    { label: "Total Users", value: stats?.total_users || 0, icon: Users, color: "text-blue-500" },
-    { label: "Friends", value: stats?.total_friends || 0, icon: UserPlus, color: "text-emerald-500" },
-    { label: "Total Jobs", value: stats?.total_jobs || 0, icon: Briefcase, color: "text-purple-500" },
-    { label: "Posted Today", value: stats?.today_jobs || 0, icon: TrendingUp, color: "text-amber-500" },
+    { label: "Active Jobs", value: botAnalytics?.overview?.total_active_jobs || 0, icon: Briefcase, color: "text-purple-500" },
+    { label: "Total Jobs Posted", value: botAnalytics?.overview?.total_jobs_posted || 0, icon: TrendingUp, color: "text-amber-500" },
+    { label: "Total Users", value: botAnalytics?.overview?.total_users || 0, icon: Users, color: "text-blue-500" },
+    { label: "Linked Users", value: botAnalytics?.overview?.total_linked_users || 0, icon: UserPlus, color: "text-emerald-500" },
   ];
+
+
 
   return (
     <div className="space-y-8 animate-fade-in" data-testid="admin-dashboard">
@@ -335,6 +352,26 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="jobs" className="mt-4">
+          <div className="flex justify-end mb-4">
+            <Button
+              variant="outline"
+              className="gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/20"
+              onClick={async () => {
+                if (!window.confirm("Are you sure? This will send notifications for ALL active jobs to ALL linked users. This might be a lot of messages!")) return;
+                const toastId = toast.loading("Queueing job notifications...");
+                try {
+                  const res = await axios.post(`${API}/admin/force-push-jobs`, {}, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                  toast.success(res.data.message, { id: toastId });
+                } catch (err) {
+                  toast.error(err.response?.data?.detail || "Failed to force push jobs", { id: toastId });
+                }
+              }}
+            >
+              <Bell className="h-4 w-4" /> Force Push All Jobs
+            </Button>
+          </div>
           <Card>
             <CardContent className="p-0">
               <Table data-testid="admin-jobs-table">
@@ -422,6 +459,15 @@ export default function AdminDashboard() {
                   rows={5}
                   className="resize-none"
                   data-testid="broadcast-textarea"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="broadcast-photo">Attach Screenshot (Optional)</Label>
+                <Input
+                  id="broadcast-photo"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setBroadcastFile(e.target.files[0] || null)}
                 />
               </div>
               {linkedUsersCount === 0 ? (
@@ -643,8 +689,8 @@ export default function AdminDashboard() {
                                             </div>
                                             <div className="flex items-center gap-3 shrink-0 ml-3">
                                               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.response === 'applied' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                                  r.response === 'not_interested' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                                    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                                r.response === 'not_interested' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                                  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                                 }`}>
                                                 {r.response === 'applied' ? '✅ Applied' : r.response === 'not_interested' ? '❌ Not Interested' : '🔔 Remind'}
                                               </span>

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request, UploadFile, File, Form
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -29,7 +29,7 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'fallback_secret')
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
-app = FastAPI()
+
 api_router = APIRouter(prefix="/api")
 
 # Logging
@@ -91,9 +91,6 @@ class RankingOut(BaseModel):
     email: str
     job_count: int
 
-class BroadcastMessage(BaseModel):
-    message: str
-
 class TelegramLink(BaseModel):
     telegram_chat_id: str
 
@@ -114,18 +111,35 @@ def create_token(user_id: str, role: str) -> str:
 
 async def get_current_user(request: Request) -> dict:
     auth_header = request.headers.get("Authorization", "")
+    with open("debug_auth.log", "a") as f:
+        f.write(f"{datetime.now()}: Auth Header: '{auth_header}'\n")
+
     if not auth_header.startswith("Bearer "):
+        with open("debug_auth.log", "a") as f:
+            f.write(f"{datetime.now()}: Missing or invalid Bearer prefix\n")
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = auth_header.split(" ")[1]
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        with open("debug_auth.log", "a") as f:
+            f.write(f"{datetime.now()}: Token Payload: {payload}\n")
     except jwt.ExpiredSignatureError:
+        with open("debug_auth.log", "a") as f:
+            f.write(f"{datetime.now()}: Token Expired\n")
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        with open("debug_auth.log", "a") as f:
+            f.write(f"{datetime.now()}: Invalid Token: {e}\n")
         raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        with open("debug_auth.log", "a") as f:
+            f.write(f"{datetime.now()}: Detailed Auth Error: {type(e).__name__} - {e}\n")
+        raise HTTPException(status_code=401, detail=f"Auth failed: {e}")
     
     user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0})
     if not user:
+        with open("debug_auth.log", "a") as f:
+            f.write(f"{datetime.now()}: User not found for ID {payload.get('user_id')}\n")
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
@@ -166,23 +180,50 @@ async def log_bot_event(
 
 # ---- Telegram Helpers ----
 async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[dict] = None):
-    """Send a Telegram message, optionally with inline keyboard buttons."""
+    """Send a Telegram message, optionally with inline keyboard buttons. Includes retry mechanism."""
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("No Telegram bot token configured")
         return
+    
+    payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+        
+    for attempt in range(5): # Retry up to 5 times
+        try:
+            async with httpx.AsyncClient() as client_http:
+                resp = await client_http.post(
+                    f"{TELEGRAM_API}/sendMessage",
+                    json=payload
+                )
+                if resp.status_code == 200:
+                    return
+                elif resp.status_code == 429:
+                    retry_after = int(resp.json().get("parameters", {}).get("retry_after", 5))
+                    logger.warning(f"Rate limited. Sleeping for {retry_after}s...")
+                    await asyncio.sleep(retry_after)
+                else:
+                    logger.error(f"Telegram send failed: {resp.text}")
+                    return # Don't retry other errors for now
+        except Exception as e:
+            logger.error(f"Telegram error: {e}")
+            await asyncio.sleep(1) # Basic backoff
+
+async def send_telegram_photo(chat_id: str, photo_bytes: bytes, caption: str = ""):
+    """Send a photo to Telegram."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
     try:
-        payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-        if reply_markup:
-            payload["reply_markup"] = reply_markup
         async with httpx.AsyncClient() as client_http:
             resp = await client_http.post(
-                f"{TELEGRAM_API}/sendMessage",
-                json=payload
+                f"{TELEGRAM_API}/sendPhoto",
+                data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+                files={"photo": ("image.jpg", photo_bytes, "image/jpeg")}
             )
             if resp.status_code != 200:
-                logger.error(f"Telegram send failed: {resp.text}")
+                logger.error(f"Telegram photo send failed: {resp.text}")
     except Exception as e:
-        logger.error(f"Telegram error: {e}")
+        logger.error(f"Telegram photo error: {e}")
 
 async def answer_callback_query(callback_query_id: str, text: str = ""):
     """Acknowledge a callback query (removes loading spinner on button)."""
@@ -225,25 +266,31 @@ def build_job_buttons(job_id: str) -> dict:
     }
 
 async def notify_all_users_new_job(text: str, job_id: str, job_title: str = ""):
-    """Send a new job notification with inline buttons to all linked users."""
+    """Send a new job notification with inline buttons to all linked users. Throttled."""
     users = await db.users.find(
         {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
         {"_id": 0, "telegram_chat_id": 1, "email": 1, "name": 1}
     ).to_list(1000)
     buttons = build_job_buttons(job_id)
+    
     for user in users:
         chat_id = user.get("telegram_chat_id")
         if chat_id:
-            await send_telegram_message(chat_id, text, reply_markup=buttons)
-            await log_bot_event(
-                event_type="job_notification_sent",
-                chat_id=chat_id,
-                user_email=user.get("email", ""),
-                user_name=user.get("name", ""),
-                job_id=job_id,
-                job_title=job_title
-            )
-
+            try:
+                await send_telegram_message(chat_id, text, reply_markup=buttons)
+                await log_bot_event(
+                    event_type="job_notification_sent",
+                    chat_id=chat_id,
+                    user_email=user.get("email", ""),
+                    user_name=user.get("name", ""),
+                    job_id=job_id,
+                    job_title=job_title,
+                    action="notification_sent"
+                )
+                # Rate limit to ~20 messages per second
+                await asyncio.sleep(0.05) 
+            except Exception as e:
+                logger.error(f"Failed to notify {chat_id}: {e}")
 async def check_deadlines():
     """Check for jobs with upcoming deadlines and notify all users except those who opted out."""
     now = datetime.now(timezone.utc)
@@ -329,8 +376,11 @@ async def check_deadlines():
             logger.error(f"Deadline check error for job {job.get('id', '?')}: {e}")
 
 # ---- Startup ----
-@app.on_event("startup")
-async def startup():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     # Create indexes
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
@@ -341,6 +391,7 @@ async def startup():
     await db.bot_events.create_index("event_type")
     await db.bot_events.create_index("chat_id")
     
+
     # Seed admin
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@friendboard.com')
     admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
@@ -369,12 +420,16 @@ async def startup():
     # Start scheduler for deadline reminders (every 6 hours)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_deadlines, 'interval', hours=6)
+    
     scheduler.start()
     logger.info("Deadline reminder scheduler started")
-
-@app.on_event("shutdown")
-async def shutdown():
+    
+    yield
+    
+    # Shutdown
     client.close()
+
+app = FastAPI(lifespan=lifespan)
 
 # ---- Auth Routes ----
 @api_router.post("/auth/login")
@@ -453,7 +508,7 @@ async def delete_user(user_id: str, request: Request):
     await db.users.delete_one({"id": user_id})
     return {"message": "User deleted"}
 
-# ---- Job Routes ----
+
 @api_router.post("/jobs")
 async def create_job(data: JobCreate, request: Request):
     user = await get_current_user(request)
@@ -530,7 +585,9 @@ async def update_job(job_id: str, data: JobUpdate, request: Request):
 @api_router.get("/jobs")
 async def list_jobs(request: Request):
     await get_current_user(request)
-    jobs = await db.jobs.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # Filter out expired jobs from the list view as well, just in case
+    now = datetime.now(timezone.utc).isoformat()
+    jobs = await db.jobs.find({"deadline": {"$gte": now}}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return jobs
 
 @api_router.delete("/jobs/{job_id}")
@@ -596,10 +653,14 @@ async def link_telegram(data: TelegramLink, request: Request):
 
 # ---- Admin Broadcast ----
 @api_router.post("/admin/broadcast")
-async def broadcast_message(data: BroadcastMessage, request: Request):
+async def broadcast_message(
+    request: Request,
+    message: str = Form(...),
+    photo: Optional[UploadFile] = File(None)
+):
     await require_admin(request)
     
-    if not data.message.strip():
+    if not message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
     users = await db.users.find(
@@ -609,18 +670,28 @@ async def broadcast_message(data: BroadcastMessage, request: Request):
     
     sent_count: int = 0
     failed_count: int = 0
+    
+    # Read photo bytes once if present
+    photo_bytes = None
+    if photo:
+        photo_bytes = await photo.read()
+    
     for user in users:
         chat_id = user.get("telegram_chat_id")
         if chat_id:
             try:
-                await send_telegram_message(chat_id, data.message)
+                if photo_bytes:
+                    await send_telegram_photo(chat_id, photo_bytes, caption=message)
+                else:
+                    await send_telegram_message(chat_id, message)
+                
                 sent_count += 1
                 await log_bot_event(
                     event_type="broadcast_sent",
                     chat_id=chat_id,
                     user_email=user.get("email", ""),
                     user_name=user.get("name", ""),
-                    metadata={"message_preview": data.message[:100]}
+                    metadata={"message_preview": message[:100], "has_photo": bool(photo)}
                 )
             except Exception as e:
                 logger.error(f"Failed to send to chat_id {chat_id}: {e}")
@@ -812,39 +883,54 @@ async def get_stats(request: Request):
 async def get_bot_analytics(request: Request):
     await require_admin(request)
     now = datetime.now(timezone.utc)
-
-    # --- Overview ---
+    
+    # --- Overview Stats ---
     total_users = await db.users.count_documents({})
     total_linked = await db.users.count_documents(
         {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]}
     )
+    
+    # Active jobs (deadline > now)
+    now_iso = now.isoformat()
+    total_active_jobs = await db.jobs.count_documents({"deadline": {"$gt": now_iso}})
+
+    # Total jobs ever posted (Approximation: count distinct job_ids from notifications sent)
+    # Since we delete expired jobs, we can't just count db.jobs
+    # We use bot_events to track history
+    historical_jobs = await db.bot_events.distinct("job_id", {"event_type": "job_notification_sent"})
+    total_jobs_posted = len(historical_jobs)
+    # Fallback: if event history is empty/cleared, at least show current active count
+    if total_jobs_posted < total_active_jobs:
+        total_jobs_posted = total_active_jobs
+
     total_bot_events = await db.bot_events.count_documents({})
     total_button_clicks = await db.bot_events.count_documents({"event_type": "button_click"})
     total_jobs_notified = await db.bot_events.count_documents({"event_type": "job_notification_sent"})
     total_broadcasts = await db.bot_events.count_documents({"event_type": "broadcast_sent"})
     total_reminders = await db.bot_events.count_documents({"event_type": "reminder_sent"})
-
-    # --- Response breakdown from job_responses ---
-    response_pipeline = [
+    
+    # --- Response Breakdown ---
+    pipeline = [
         {"$group": {"_id": "$response", "count": {"$sum": 1}}}
     ]
-    response_agg = await db.job_responses.aggregate(response_pipeline).to_list(10)
-    response_breakdown = {"applied": 0, "not_interested": 0, "remind": 0}
-    for r in response_agg:
-        if r["_id"] in response_breakdown:
-            response_breakdown[r["_id"]] = r["count"]
-
-    # --- Per-job responses ---
-    all_jobs = await db.jobs.find({}, {"_id": 0, "id": 1, "role": 1, "company_name": 1}).sort("created_at", -1).to_list(200)
+    resp_agg = await db.job_responses.aggregate(pipeline).to_list(10)
+    response_breakdown = {r["_id"]: r["count"] for r in resp_agg}
+    
+    # --- Per-job responses (Top 10 active/recent) ---
+    # We prioritize active jobs first by filtering out expired ones
+    # This ensures the table only shows jobs that are currently live
+    jobs = await db.jobs.find({"deadline": {"$gt": now_iso}}, {"_id": 0}).sort("created_at", -1).to_list(10)
     per_job_responses = []
-    for job in all_jobs:
+    
+    for job in jobs:
         job_id = job["id"]
         job_title = f"{job['role']} at {job['company_name']}"
-        # Count how many notifications were sent for this job
-        notified_count = await db.bot_events.count_documents({"event_type": "job_notification_sent", "job_id": job_id})
-        if notified_count == 0:
-            # Fallback: estimate from linked users at the time
-            notified_count = total_linked
+        
+        # Count notifications sent for this job
+        notified_count = await db.bot_events.count_documents(
+            {"event_type": "job_notification_sent", "job_id": job_id}
+        )
+        
         # Get responses for this job
         job_resp_pipeline = [
             {"$match": {"job_id": job_id}},
@@ -861,8 +947,8 @@ async def get_bot_analytics(request: Request):
                 not_interested = r["count"]
             elif r["_id"] == "remind":
                 remind = r["count"]
-        total_responded = applied + not_interested + remind
-        no_response = max(0, notified_count - total_responded)
+        total_responded = int(applied) + int(not_interested) + int(remind)
+        no_response = max(0, int(notified_count) - total_responded)
         rate = round((total_responded / notified_count * 100), 1) if notified_count > 0 else 0
         per_job_responses.append({
             "job_id": job_id,
@@ -952,6 +1038,8 @@ async def get_bot_analytics(request: Request):
             "total_bot_events": total_bot_events,
             "total_button_clicks": total_button_clicks,
             "total_jobs_notified": total_jobs_notified,
+            "total_active_jobs": total_active_jobs,  # New
+            "total_jobs_posted": total_jobs_posted,  # New (Historical)
             "total_broadcasts_sent": total_broadcasts,
             "total_reminders_sent": total_reminders
         },
@@ -1006,13 +1094,145 @@ async def get_user_bot_detail(chat_id: str, request: Request):
         "events": recent_events
     }
 
+
+
+# ---- Scheduled Tasks ----
+async def cleanup_expired_jobs():
+    """Delete jobs that have passed their deadline."""
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.jobs.delete_many({"deadline": {"$lt": now}})
+    if result.deleted_count > 0:
+        logger.info(f"Deleted {result.deleted_count} expired jobs")
+        # Cleanup related data
+        # Note: In a real app, we might want to keep the job but mark as archived
+        # For now, we delete to keep it simple as requested
+        # We could also find the IDs first to be more precise with cascading
+        pass
+
+async def check_reminders():
+    """Send reminders to users who clicked 'Remind Me Later'."""
+    # Logic: Find bot events of type 'button_click' with action 'remind' 
+    # where created_at is older than X hours (e.g., 24 hours) and no reminder sent yet.
+    # For simplicity/demo: querying job_responses with response='remind'
+    
+    # 1. Find all 'remind' responses
+    reminders = await db.job_responses.find({"response": "remind"}).to_list(1000)
+    
+    count = 0
+    for r in reminders:
+        # Check if we already sent a reminder for this specific user+job combo
+        # We can check bot_events for event_type='reminder_sent'
+        already_sent = await db.bot_events.find_one({
+            "event_type": "reminder_sent",
+            "chat_id": r["chat_id"],
+            "job_id": r["job_id"]
+        })
+        
+        if not already_sent:
+            # Check if enough time has passed (e.g., 4 hours for testing/demo, or user defined)
+            # responded_at is ISO string
+            responded_at = datetime.fromisoformat(r["responded_at"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) > responded_at + timedelta(hours=4):
+                # Send reminder
+                job = await db.jobs.find_one({"id": r["job_id"]})
+                if job:
+                    msg = (
+                        f"⏰ <b>Reminder: You asked to be reminded about this job!</b>\n\n"
+                        f"<b>{job.get('role')}</b> at <b>{job.get('company_name')}</b>\n"
+                        f"Deadline: {job.get('deadline', '')[:10]}\n"
+                        f"Apply: {job.get('apply_link')}"
+                    )
+                    try:
+                        # Re-send with buttons (Applied/Not Interested) to allow them to update status
+                        await send_telegram_message(r["chat_id"], msg, reply_markup=build_job_buttons(job["id"]))
+                        
+                        # Log the event so we don't send again
+                        await log_bot_event(
+                            event_type="reminder_sent",
+                            chat_id=r["chat_id"],
+                            user_email="", # Could fetch user if needed
+                            user_name="",
+                            job_id=job["id"],
+                            job_title=f"{job.get('role')} at {job.get('company_name')}",
+                            action="reminder_sent"
+                        )
+                        count += 1
+                    except Exception as e:
+                        logger.error(f"Failed to send reminder to {r['chat_id']}: {e}")
+
+    if count > 0:
+        logger.info(f"Sent {count} reminders")
+
+# ---- Force Push Endpoint ----
+@api_router.post("/admin/force-push-jobs")
+async def force_push_jobs(request: Request):
+    await require_admin(request)
+    
+    # 1. Get all active active jobs (deadline > now)
+    now = datetime.now(timezone.utc).isoformat()
+    jobs = await db.jobs.find({"deadline": {"$gt": now}}).sort("created_at", -1).to_list(50) # Limit to 50 to avoid spamming too much
+    
+    if not jobs:
+        return {"message": "No active jobs to push", "count": 0}
+
+    # 2. Get count of linked users for reporting
+    user_count = await db.users.count_documents(
+        {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]}
+    )
+    
+    if user_count == 0:
+        return {"message": "No linked users found", "count": 0}
+        
+    async def push_sequence(jobs_to_push):
+        """Sequential push to respect rate limits"""
+        logger.info(f"Starting force push of {len(jobs_to_push)} jobs to {user_count} users")
+        for job in jobs_to_push:
+            msg = (
+                f"📢 <b>Job Alert!</b>\n\n"
+                f"<b>{job['role']}</b> at <b>{job['company_name']}</b>\n"
+                f"Location: {job['location']}\n"
+                f"Deadline: {job['deadline'][:10]}\n"
+                f"Apply: {job['apply_link']}"
+            )
+            # This function now has internal throttling (0.05s per user)
+            # We await it to ensure we don't start the next job loop until this one is done/throttled
+            await notify_all_users_new_job(msg, job["id"], job_title=f"{job['role']} at {job['company_name']}")
+            
+            # Extra pause between jobs to be safe
+            await asyncio.sleep(1.0) 
+        logger.info("Force push sequence completed")
+
+    # Start the sequence in background
+    asyncio.create_task(push_sequence(jobs))
+        
+    return {"message": f"Queued {len(jobs)} jobs to be sent to all users sequentially.", "jobs_count": len(jobs), "users_count": user_count}
+
+
+# ---- App Startup ----
+@app.on_event("startup")
+async def startup_event():
+    scheduler = AsyncIOScheduler()
+    # Check for expired jobs every hour
+    scheduler.add_job(cleanup_expired_jobs, 'interval', hours=1)
+    
+    # Check for reminders every 15 minutes
+    scheduler.add_job(check_reminders, 'interval', minutes=15)
+    
+    scheduler.start()
+    logger.info("Scheduler started for cleanup and reminders")
+    
+    # Run cleanup immediately on startup to ensure clean state
+    # Use create_task to not block startup if it takes time
+    asyncio.create_task(cleanup_expired_jobs())
+
+
 # Include router and middleware
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

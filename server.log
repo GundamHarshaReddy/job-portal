@@ -1,0 +1,67 @@
+INFO:     Will watch for changes in these directories: ['/Users/harshareddy/jobss/job-portal']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [10662] using StatReload
+INFO:     Started server process [10705]
+INFO:     Waiting for application startup.
+2026-02-15 00:59:28,366 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 00:59:28,366 - apscheduler.scheduler - INFO - Added job "check_deadlines" to job store "default"
+2026-02-15 00:59:28,366 - apscheduler.scheduler - INFO - Scheduler started
+2026-02-15 00:59:28,366 - backend.server - INFO - Deadline reminder scheduler started
+INFO:     Application startup complete.
+2026-02-15 00:59:39,662 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAxOTkxfQ.P9m8DQr3GfoLluIfOCfi9U_7uU3TwHfznyiO325bdH4'
+2026-02-15 00:59:39,663 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771701991}
+INFO:     127.0.0.1:51320 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 00:59:39,689 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAxOTkxfQ.P9m8DQr3GfoLluIfOCfi9U_7uU3TwHfznyiO325bdH4'
+2026-02-15 00:59:39,689 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771701991}
+INFO:     127.0.0.1:51320 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 00:59:48,003 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAxOTkxfQ.P9m8DQr3GfoLluIfOCfi9U_7uU3TwHfznyiO325bdH4'
+2026-02-15 00:59:48,003 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771701991}
+INFO:     127.0.0.1:51327 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 00:59:48,029 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAxOTkxfQ.P9m8DQr3GfoLluIfOCfi9U_7uU3TwHfznyiO325bdH4'
+2026-02-15 00:59:48,029 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771701991}
+INFO:     127.0.0.1:51327 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 01:00:07,318 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAxOTU1fQ.0B_aUm7OcC0XOT9fQ7pllBcYXjz9ncl53T_2kDzCOmk'
+2026-02-15 01:00:07,318 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771701955}
+INFO:     127.0.0.1:51339 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 01:00:07,345 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAxOTU1fQ.0B_aUm7OcC0XOT9fQ7pllBcYXjz9ncl53T_2kDzCOmk'
+2026-02-15 01:00:07,345 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771701955}
+INFO:     127.0.0.1:51339 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51345 - "POST /api/auth/login HTTP/1.1" 200 OK
+2026-02-15 01:00:37,383 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAyMjM3fQ.yvPfnBQeoprEj_p7jE9sqpZFtb4mfObf5W1geq1zXIg'
+2026-02-15 01:00:37,383 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771702237}
+INFO:     127.0.0.1:51345 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 01:00:44,988 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAyMjM3fQ.yvPfnBQeoprEj_p7jE9sqpZFtb4mfObf5W1geq1zXIg'
+2026-02-15 01:00:44,989 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771702237}
+INFO:     127.0.0.1:51355 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 01:00:45,017 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAyMjM3fQ.yvPfnBQeoprEj_p7jE9sqpZFtb4mfObf5W1geq1zXIg'
+2026-02-15 01:00:45,017 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771702237}
+INFO:     127.0.0.1:51355 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 01:00:53,225 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAyMjM3fQ.yvPfnBQeoprEj_p7jE9sqpZFtb4mfObf5W1geq1zXIg'
+2026-02-15 01:00:53,225 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771702237}
+INFO:     127.0.0.1:51362 - "GET /api/auth/me HTTP/1.1" 200 OK
+2026-02-15 01:00:53,252 - backend.server - ERROR - DEBUG: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcxNzAyMjM3fQ.yvPfnBQeoprEj_p7jE9sqpZFtb4mfObf5W1geq1zXIg'
+2026-02-15 01:00:53,252 - backend.server - ERROR - DEBUG: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1771702237}
+INFO:     127.0.0.1:51362 - "GET /api/auth/me HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'backend/server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10705]
+INFO:     Started server process [10790]
+INFO:     Waiting for application startup.
+2026-02-15 01:01:30,027 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 01:01:30,028 - apscheduler.scheduler - INFO - Added job "check_deadlines" to job store "default"
+2026-02-15 01:01:30,028 - apscheduler.scheduler - INFO - Scheduler started
+2026-02-15 01:01:30,028 - backend.server - INFO - Deadline reminder scheduler started
+INFO:     Application startup complete.
+ERROR:    Traceback (most recent call last):
+  File "/Users/harshareddy/jobss/job-portal/backend/venv/lib/python3.13/site-packages/starlette/routing.py", line 741, in lifespan
+    await receive()
+  File "/Users/harshareddy/jobss/job-portal/backend/venv/lib/python3.13/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/queues.py", line 186, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+INFO:     Stopping reloader process [10662]

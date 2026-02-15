@@ -745,10 +745,7 @@ async def telegram_webhook(request: Request):
                     "<code>/start your@email.com</code>\n\n"
                     "To unlink and stop notifications:\n"
                     "<code>/stop your@email.com</code>\n\n"
-                    "Once linked, you'll receive job notifications with these options:\n"
-                    "\u2705 <b>Applied</b> — stop reminders for that job\n"
-                    "\u274c <b>Not Interested</b> — stop reminders for that job\n"
-                    "\U0001f514 <b>Remind Me Later</b> — get reminders until the deadline"
+                    "Once linked, you'll receive job notifications."
                 )
                 await log_bot_event(event_type="command_start", chat_id=chat_id, metadata={"reason": "no_email_provided"})
         

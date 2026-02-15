@@ -1,4 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -401,7 +403,12 @@ async def lifespan(app: FastAPI):
     await db.bot_events.create_index("event_type")
     await db.bot_events.create_index("chat_id")
     
-
+    await db.bot_events.create_index("chat_id")
+    
+    # Performance Indexes
+    await db.jobs.create_index("created_at")
+    await db.jobs.create_index("deadline")
+    await db.jobs.create_index("posted_by")
     # Seed admin
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@friendboard.com')
     admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
@@ -1305,3 +1312,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Serve React static files (should be last)
+# Ensure the build directory exists before mounting
+if os.path.isdir("frontend/build"):
+    app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
+else:
+    logger.warning("Frontend build directory not found. Run 'npm run build' in frontend directory.")

@@ -10,6 +10,7 @@ import AddJobPage from "./pages/AddJobPage";
 import RankingsPage from "./pages/RankingsPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProfilePage from "./pages/ProfilePage";
+import RCJOPage from "./pages/RCJOPage";
 
 import AppLayout from "@/components/AppLayout";
 
@@ -96,6 +97,7 @@ function AppRoutes() {
         {user?.role === "admin" && <Route path="admin" element={<AdminDashboard />} />}
 
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="rcjo" element={<RCJOPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

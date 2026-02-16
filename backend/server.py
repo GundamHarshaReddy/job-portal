@@ -4,6 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import UpdateOne
 import os
 import logging
 import asyncio
@@ -684,6 +685,106 @@ async def delete_job(job_id: str, request: Request):
     await db.job_responses.delete_many({"job_id": job_id})
     await db.bot_events.delete_many({"job_id": job_id})
     return {"message": "Job deleted"}
+
+# ---- RCJO Models ----
+class RCJOJobCreate(BaseModel):
+    company_name: str
+    role: str
+    job_type: str = "Full-time"
+    location: str
+    apply_link: str
+    deadline: Optional[str] = None
+    source: str = "RCJO Scraper"
+
+class RCJOJobOut(BaseModel):
+    id: str
+    company_name: str
+    role: str
+    job_type: str
+    location: str
+    apply_link: str
+    deadline: Optional[str] = None
+    source: str
+    created_at: str
+
+# ---- RCJO Endpoints ----
+@api_router.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+@api_router.post("/rcjo-jobs/bulk")
+async def bulk_create_rcjo_jobs(jobs: list[RCJOJobCreate], request: Request):
+    # API Key Authentication
+    api_key = request.headers.get("x-api-key")
+    expected_key = os.environ.get("RCJO_API_KEY", "default_secret_key")
+    
+    if api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    if not jobs:
+        return {"message": "No jobs to insert", "count": 0}
+
+    operations = []
+    now = datetime.now(timezone.utc).isoformat()
+    
+    for job in jobs:
+        # Use apply_link as the unique identifier
+        # If it exists, update the details (in case deadline or something changed)
+        # If not, insert it (upsert=True)
+        # We process the fields...
+        
+        # Note: id is generated only on insert if we handle it manually, but UpdateOne with upsert 
+        # doesn't auto-generate our UUID 'id' field if it's a new doc.
+        # So we need to set 'id' only if it's an insert.
+        # MongoDB $setOnInsert is perfect for this.
+        
+        filter_criteria = {"apply_link": job.apply_link}
+        
+        update_doc = {
+            "$set": {
+                "company_name": job.company_name,
+                "role": job.role,
+                "job_type": job.job_type,
+                "location": job.location,
+                "deadline": job.deadline,
+                "source": job.source,
+                "updated_at": now
+            },
+            "$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "created_at": now
+            }
+        }
+        
+        operations.append(UpdateOne(filter_criteria, update_doc, upsert=True))
+    
+    if operations:
+        result = await db.rcjo_jobs.bulk_write(operations)
+        count = result.upserted_count + result.modified_count
+        return {
+            "message": "Bulk operation completed", 
+            "inserted": result.upserted_count, 
+            "updated": result.modified_count,
+            "matched": result.matched_count
+        }
+    
+    return {"message": "No operations performed", "count": 0}
+
+@api_router.get("/rcjo-jobs")
+async def list_rcjo_jobs(request: Request):
+    # Public or authenticated? Let's make it authenticated like other job lists
+    await get_current_user(request)
+    
+    jobs = await db.rcjo_jobs.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return jobs
+
+@api_router.delete("/rcjo-jobs/all")
+async def delete_all_rcjo_jobs(request: Request):
+    user = await require_admin(request)
+    
+    result = await db.rcjo_jobs.delete_many({})
+    return {"message": "All RCJO jobs deleted", "deleted_count": result.deleted_count}
+
 
 # ---- Rankings ----
 @api_router.get("/rankings")

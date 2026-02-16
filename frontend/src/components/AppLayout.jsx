@@ -22,6 +22,7 @@ const navItems = [
   { to: "/add-job", label: "Post Job", icon: Plus },
 
   { to: "/rankings", label: "Rankings", icon: Trophy },
+  { to: "/rcjo", label: "RCJO", icon: Briefcase },
 ];
 
 const adminItems = [

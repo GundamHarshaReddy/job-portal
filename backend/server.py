@@ -712,6 +712,19 @@ class RCJOJobOut(BaseModel):
 async def health_check():
     return {"status": "ok"}
 
+@api_router.get("/public/stats")
+async def public_stats():
+    """Public stats for the landing page - no auth required."""
+    total_jobs = await db.jobs.count_documents({})
+    total_rcjo_jobs = await db.rcjo_jobs.count_documents({})
+    total_applications = await db.job_responses.count_documents({})
+    total_users = await db.users.count_documents({})
+    return {
+        "total_job_postings": total_jobs + total_rcjo_jobs,
+        "total_applications": total_applications,
+        "active_users": total_users
+    }
+
 @api_router.post("/rcjo-jobs/bulk")
 async def bulk_create_rcjo_jobs(jobs: list[RCJOJobCreate], request: Request):
     # API Key Authentication

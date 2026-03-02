@@ -1,11 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Briefcase, Eye, EyeOff } from "lucide-react";
+import { Briefcase, Eye, EyeOff, Users, FileText, Send } from "lucide-react";
 import { toast } from "sonner";
+import axios from "axios";
+import { AnimatedCounter } from "@/components/AnimatedCounter";
+
+const API = `${process.env.REACT_APP_BACKEND_URL || "http://localhost:8000"}/api`;
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -13,6 +17,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    axios.get(`${API}/public/stats`)
+      .then(res => setStats(res.data))
+      .catch(() => { }); // silently fail — stats are non-critical
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,6 +40,12 @@ export default function LoginPage() {
     }
     setLoading(false);
   };
+
+  const statItems = [
+    { label: "Job Postings", value: stats?.total_job_postings || 0, icon: Briefcase, color: "text-blue-500" },
+    { label: "Applications", value: stats?.total_applications || 0, icon: Send, color: "text-emerald-500" },
+    { label: "Active Users", value: stats?.active_users || 0, icon: Users, color: "text-violet-500" },
+  ];
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2" data-testid="login-page">
@@ -113,7 +130,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right - Image */}
+      {/* Right - Image + Stats */}
       <div className="hidden lg:block relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5" />
         <img
@@ -122,6 +139,26 @@ export default function LoginPage() {
           className="h-full w-full object-cover"
           data-testid="login-bg-image"
         />
+
+        {/* Stats bar */}
+        {stats && (
+          <div className="absolute top-8 left-8 right-8">
+            <div className="grid grid-cols-3 gap-3">
+              {statItems.map((s) => (
+                <Card key={s.label} className="bg-background/80 backdrop-blur-xl border-border/50">
+                  <CardContent className="p-4 flex flex-col items-center text-center">
+                    <s.icon className={`h-5 w-5 mb-1.5 ${s.color}`} />
+                    <span className="text-2xl font-bold tracking-tight">
+                      <AnimatedCounter value={s.value} />+
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-0.5">{s.label}</span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="absolute bottom-12 left-12 right-12">
           <Card className="bg-background/80 backdrop-blur-xl border-border/50">
             <CardContent className="p-6">

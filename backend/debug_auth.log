@@ -1,0 +1,46 @@
+2026-03-02 14:05:57.663492: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:57.663732: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:57.683264: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:57.683378: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:57.683688: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:57.683737: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:57.683903: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:57.683942: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:57.684250: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:57.684315: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:57.812935: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:57.813055: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:58.030189: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:58.030638: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:58.234532: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:58.234662: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:05:59.003547: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:05:59.003737: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:24.638690: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:24.639195: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:24.846263: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:24.846414: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:26.509964: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:26.510271: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:26.699148: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:26.699345: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.252201: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.252485: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.335693: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.335828: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.850045: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.850397: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.851075: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.851200: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.851928: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.852020: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.852221: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.852324: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.960714: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.961148: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:28.962570: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:28.962819: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:29.062346: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:29.062475: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}
+2026-03-02 14:06:29.774880: Auth Header: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOTk1NDMxZjEtOWI4YS00Nzk5LThmM2YtY2Y5MTEzN2RjMGQ1Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMDQ1MzU3fQ.p_oI7mZXdq5jy_g6-VYB5TJ-rkbqflu65xZl5gioWtk'
+2026-03-02 14:06:29.775035: Token Payload: {'user_id': '995431f1-9b8a-4799-8f3f-cf91137dc0d5', 'role': 'admin', 'exp': 1773045357}

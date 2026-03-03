@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import LoginPage from "@/pages/LoginPage";
@@ -113,6 +114,7 @@ function App() {
           <Toaster position="top-right" richColors />
         </AuthProvider>
       </BrowserRouter>
+      <Analytics />
     </ThemeProvider>
   );
 }

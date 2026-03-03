@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from typing import Optional, Any
 import uuid
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo('Asia/Kolkata')
 import bcrypt
 import jwt
 import httpx
@@ -118,7 +121,7 @@ def create_token(user_id: str, role: str) -> str:
     payload = {
         "user_id": user_id,
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7)
+        "exp": datetime.now(IST) + timedelta(days=7)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
@@ -185,7 +188,7 @@ async def log_bot_event(
             "job_title": job_title,
             "action": action,
             "metadata": metadata or {},
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "created_at": datetime.now(IST).isoformat()
         }
         await db.bot_events.insert_one(doc)
     except Exception as e:
@@ -306,7 +309,7 @@ async def notify_all_users_new_job(text: str, job_id: str, job_title: str = ""):
                 logger.error(f"Failed to notify {chat_id}: {e}")
 async def check_deadlines():
     """Check for jobs with upcoming deadlines and notify all users except those who opted out."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IST)
     
     # Get all linked users
     all_users = await db.users.find(
@@ -322,27 +325,27 @@ async def check_deadlines():
     for job in jobs:
         try:
             deadline = datetime.fromisoformat(job["deadline"].replace("Z", "+00:00"))
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=IST)
             if deadline <= now:
                 continue  # Skip expired jobs
             
             hours_left = (deadline - now).total_seconds() / 3600
             job_id = job["id"]
             
-            # Find users who clicked "Applied" or "Not Interested" — they opted OUT
+            # Find users who clicked "Applied" or "Not Interested", AND those who clicked "Remind Me"
+            # users with "remind" response are handled by check_reminders
             opted_out = await db.job_responses.find(
-                {"job_id": job_id, "response": {"$in": ["applied", "not_interested"]}}
+                {"job_id": job_id, "response": {"$in": ["applied", "not_interested", "remind"]}}
             ).to_list(1000)
             opted_out_chat_ids = {r["chat_id"] for r in opted_out}
             
-            # Everyone else gets reminders (no response = default remind)
+            # Everyone else gets broad reminders (no response at all)
             remind_chat_ids = [cid for cid in all_chat_ids if cid not in opted_out_chat_ids]
             
             for chat_id in remind_chat_ids:
-                # Check cooldown: every 6h if deadline <= 24h, every 24h otherwise
-                if hours_left <= 24:
-                    cooldown_hours = 6
-                else:
-                    cooldown_hours = 24
+                # Check cooldown: unconditionally every 6h if no response
+                cooldown_hours = 6
                 
                 # Check if we already sent a reminder within the cooldown period
                 cutoff = now - timedelta(hours=cooldown_hours - 0.5)  # 30 min buffer
@@ -424,7 +427,7 @@ async def lifespan(app: FastAPI):
             "password_hash": hash_password(admin_password),
             "role": "admin",
             "telegram_chat_id": None,
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "created_at": datetime.now(IST).isoformat()
         }
         await db.users.insert_one(admin_doc)
         logger.info(f"Admin account created: {admin_email}")
@@ -507,7 +510,7 @@ async def create_user(data: UserCreate, request: Request):
         "password_hash": hash_password(data.password),
         "role": "friend",
         "telegram_chat_id": None,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(IST).isoformat()
     }
     await db.users.insert_one(user_doc)
     return {
@@ -601,7 +604,7 @@ async def create_job(data: JobCreate, request: Request):
         "deadline": data.deadline,
         "posted_by": user["id"],
         "posted_by_name": "Anonymous" if user.get("is_hidden") else user["name"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(IST).isoformat(),
         "source": data.source
     }
     await db.jobs.insert_one(job_doc)
@@ -664,7 +667,7 @@ async def update_job(job_id: str, data: JobUpdate, request: Request):
 async def list_jobs(request: Request):
     await get_current_user(request)
     # Filter out expired jobs from the list view as well, just in case
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(IST).isoformat()
     jobs = await db.jobs.find({"deadline": {"$gte": now}}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return jobs
 
@@ -738,7 +741,7 @@ async def bulk_create_rcjo_jobs(jobs: list[RCJOJobCreate], request: Request):
         return {"message": "No jobs to insert", "count": 0}
 
     operations = []
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(IST).isoformat()
     
     for job in jobs:
         # Use apply_link as the unique identifier
@@ -1002,7 +1005,7 @@ async def telegram_webhook(request: Request):
                     {"$set": {
                         "response": action,
                         "job_title": job_title_str,
-                        "responded_at": datetime.now(timezone.utc).isoformat()
+                        "responded_at": datetime.now(IST).isoformat()
                     }},
                     upsert=True
                 )
@@ -1056,7 +1059,8 @@ async def get_stats(request: Request):
     total_jobs = await db.jobs.count_documents({})
     
     # Jobs posted today
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    now_ist = datetime.now(IST)
+    today_start = datetime.combine(now_ist.date(), datetime.min.time(), tzinfo=IST)
     today_jobs = await db.jobs.count_documents({
         "created_at": {"$gte": today_start.isoformat()}
     })
@@ -1072,7 +1076,7 @@ async def get_stats(request: Request):
 @api_router.get("/admin/bot-analytics")
 async def get_bot_analytics(request: Request):
     await require_admin(request)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IST)
     
     # --- Overview Stats ---
     total_users = await db.users.count_documents({})
@@ -1084,14 +1088,9 @@ async def get_bot_analytics(request: Request):
     now_iso = now.isoformat()
     total_active_jobs = await db.jobs.count_documents({"deadline": {"$gt": now_iso}})
 
-    # Total jobs ever posted (Approximation: count distinct job_ids from notifications sent)
-    # Since we delete expired jobs, we can't just count db.jobs
-    # We use bot_events to track history
-    historical_jobs = await db.bot_events.distinct("job_id", {"event_type": "job_notification_sent"})
-    total_jobs_posted = len(historical_jobs)
-    # Fallback: if event history is empty/cleared, at least show current active count
-    if total_jobs_posted < total_active_jobs:
-        total_jobs_posted = total_active_jobs
+    # Total jobs ever posted
+    # Since we no longer delete jobs, we can precisely count db.jobs
+    total_jobs_posted = await db.jobs.count_documents({})
 
     total_bot_events = await db.bot_events.count_documents({})
     total_button_clicks = await db.bot_events.count_documents({"event_type": "button_click"})
@@ -1286,18 +1285,9 @@ async def get_user_bot_detail(chat_id: str, request: Request):
 
 
 
-# ---- Scheduled Tasks ----
 async def cleanup_expired_jobs():
-    """Delete jobs that have passed their deadline."""
-    now = datetime.now(timezone.utc).isoformat()
-    result = await db.jobs.delete_many({"deadline": {"$lt": now}})
-    if result.deleted_count > 0:
-        logger.info(f"Deleted {result.deleted_count} expired jobs")
-        # Cleanup related data
-        # Note: In a real app, we might want to keep the job but mark as archived
-        # For now, we delete to keep it simple as requested
-        # We could also find the IDs first to be more precise with cascading
-        pass
+    """No longer deletes jobs. Expiration is handled gracefully by queries filter: {'deadline': {'$gte': now}}."""
+    pass
 
 async def check_reminders():
     """Send reminders to users who clicked 'Remind Me Later'."""
@@ -1322,7 +1312,9 @@ async def check_reminders():
             # Check if enough time has passed (e.g., 4 hours for testing/demo, or user defined)
             # responded_at is ISO string
             responded_at = datetime.fromisoformat(r["responded_at"].replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) > responded_at + timedelta(hours=4):
+            if responded_at.tzinfo is None:
+                responded_at = responded_at.replace(tzinfo=IST)
+            if datetime.now(IST) > responded_at + timedelta(hours=4):
                 # Send reminder
                 job = await db.jobs.find_one({"id": r["job_id"]})
                 if job:
@@ -1359,7 +1351,7 @@ async def force_push_jobs(request: Request):
     await require_admin(request)
     
     # 1. Get all active active jobs (deadline > now)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(IST).isoformat()
     jobs = await db.jobs.find({"deadline": {"$gt": now}}).sort("created_at", -1).to_list(50) # Limit to 50 to avoid spamming too much
     
     if not jobs:
@@ -1398,6 +1390,20 @@ async def force_push_jobs(request: Request):
     return {"message": f"Queued {len(jobs)} jobs to be sent to all users sequentially.", "jobs_count": len(jobs), "users_count": user_count}
 
 
+async def self_ping():
+    """Ping own health endpoint to prevent free tier platforms (like Render) from sleeping."""
+    # Read the host URL if defined in env, otherwise fallback to localhost (for testing/safety)
+    app_url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8000")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client_http:
+            resp = await client_http.get(f"{app_url}/api/health")
+            if resp.status_code == 200:
+                logger.info(f"Self-ping successful: {app_url} is awake")
+            else:
+                logger.warning(f"Self-ping returned status {resp.status_code}")
+    except Exception as e:
+        logger.error(f"Self-ping failed: {e}")
+
 # ---- App Startup ----
 @app.on_event("startup")
 async def startup_event():
@@ -1408,8 +1414,11 @@ async def startup_event():
     # Check for reminders every 15 minutes
     scheduler.add_job(check_reminders, 'interval', minutes=15)
     
+    # Self-ping every 13 minutes to keep free-tier servers awake
+    scheduler.add_job(self_ping, 'interval', minutes=13)
+    
     scheduler.start()
-    logger.info("Scheduler started for cleanup and reminders")
+    logger.info("Scheduler started for cleanup, reminders, and self-ping")
     
     # Run cleanup immediately on startup to ensure clean state
     # Use create_task to not block startup if it takes time

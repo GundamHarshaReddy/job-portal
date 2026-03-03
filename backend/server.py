@@ -1072,6 +1072,38 @@ async def get_stats(request: Request):
         "today_jobs": today_jobs
     }
 
+@api_router.get("/admin/infrastructure")
+async def get_infrastructure_stats(request: Request):
+    await require_admin(request)
+    
+    # 1. MongoDB Stats (dataSize in bytes, limit is 512MB for M0 free tier)
+    try:
+        db_stats = await db.command("dbstats")
+        mb_used = db_stats.get("dataSize", 0) / (1024 * 1024)
+    except Exception as e:
+        logger.error(f"Failed to fetch db stats: {e}")
+        mb_used = 0
+        
+    # 2. Render Server Uptime
+    # We reliably use 24 hours a day since the ping bot prevents sleep
+    now = datetime.now(IST)
+    days_in_month = now.day
+    # e.g. on the 3rd at 10 AM, we have used (2 days * 24h) + 10h = 58 hours
+    hours_this_month = ((days_in_month - 1) * 24) + now.hour
+    
+    return {
+        "mongodb": {
+            "used_mb": round(mb_used, 2),
+            "total_mb": 512,
+            "percent": round((mb_used / 512) * 100, 1) if mb_used else 0
+        },
+        "render": {
+            "used_hours": hours_this_month,
+            "total_hours": 750,
+            "percent": round((hours_this_month / 750) * 100, 1)
+        }
+    }
+
 # ---- Bot Analytics ----
 @api_router.get("/admin/bot-analytics")
 async def get_bot_analytics(request: Request):

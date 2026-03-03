@@ -55,6 +55,8 @@ import {
   EyeOff,
   Shield,
   ShieldOff,
+  Database,
+  Server,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
@@ -63,6 +65,7 @@ import { EmptyState } from "@/components/EmptyState";
 export default function AdminDashboard() {
   const { user, token } = useAuth();
   const [stats, setStats] = useState(null);
+  const [infraStats, setInfraStats] = useState(null);
   const [isHidden, setIsHidden] = useState(user?.is_hidden || false);
   const [users, setUsers] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -85,16 +88,18 @@ export default function AdminDashboard() {
     setLoading(true);
     const headers = { Authorization: `Bearer ${token}` };
     try {
-      const [statsRes, usersRes, jobsRes, botStatsRes] = await Promise.all([
+      const [statsRes, usersRes, jobsRes, botStatsRes, infraRes] = await Promise.all([
         axios.get(`${API}/admin/stats`, { headers }),
         axios.get(`${API}/admin/users`, { headers }),
         axios.get(`${API}/jobs`, { headers }),
         axios.get(`${API}/admin/bot-analytics`, { headers }),
+        axios.get(`${API}/admin/infrastructure`, { headers }),
       ]);
       setStats(statsRes.data);
       setUsers(usersRes.data);
       setJobs(jobsRes.data);
       setBotAnalytics(botStatsRes.data);
+      setInfraStats(infraRes.data);
     } catch (err) {
       toast.error("Failed to load dashboard data");
       console.error(err);
@@ -320,6 +325,66 @@ export default function AdminDashboard() {
           </Card>
         ))}
       </div>
+
+      {/* Infrastructure Stats */}
+      {infraStats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+          {/* MongoDB */}
+          <Card className="animate-fade-in shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Database className="h-4 w-4 text-emerald-500" /> Database Storage (MongoDB)
+                  </p>
+                  <p className="text-2xl font-bold mt-1">{infraStats.mongodb.used_mb} <span className="text-sm font-normal text-muted-foreground mr-1">/ {infraStats.mongodb.total_mb} MB</span></p>
+                </div>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 mt-3 overflow-hidden">
+                <div className="bg-emerald-500 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(infraStats.mongodb.percent, 100)}%` }}></div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">{infraStats.mongodb.percent}% of Free Tier used</p>
+            </CardContent>
+          </Card>
+
+          {/* Render */}
+          <Card className="animate-fade-in shadow-sm" style={{ animationDelay: "0.1s" }}>
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Server className="h-4 w-4 text-blue-500" /> Backend Compute (Render)
+                  </p>
+                  <p className="text-2xl font-bold mt-1">{infraStats.render.used_hours} <span className="text-sm font-normal text-muted-foreground mr-1">/ {infraStats.render.total_hours} hrs</span></p>
+                </div>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 mt-3 overflow-hidden">
+                <div className="bg-blue-500 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(infraStats.render.percent, 100)}%` }}></div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">{infraStats.render.percent}% of Free Hours this month</p>
+            </CardContent>
+          </Card>
+
+          {/* Vercel Web Analytics */}
+          <Card className="animate-fade-in shadow-sm" style={{ animationDelay: "0.2s" }}>
+            <CardContent className="p-5 flex flex-col justify-between h-full bg-gradient-to-br from-background to-violet-50/30 dark:to-violet-950/20">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-violet-500" /> Web Traffic (Vercel)
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Vercel provides extremely accurate native page views and visitor tracking.</p>
+                </div>
+              </div>
+              <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="w-full mt-auto pt-2">
+                <Button variant="outline" size="sm" className="w-full gap-2 border-violet-200 hover:bg-violet-50 hover:text-violet-700 dark:border-violet-900/50 dark:hover:bg-violet-900/40 dark:text-violet-300">
+                  <Activity className="h-4 w-4 flex-shrink-0" /> View Vercel Dashboard
+                </Button>
+              </a>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs defaultValue="users" data-testid="admin-tabs">

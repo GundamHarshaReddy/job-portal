@@ -12,6 +12,7 @@ import RankingsPage from "./pages/RankingsPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProfilePage from "./pages/ProfilePage";
 import RCJOPage from "./pages/RCJOPage";
+import ResumeBuilder from "./pages/ResumeBuilder";
 
 import AppLayout from "@/components/AppLayout";
 
@@ -99,6 +100,7 @@ function AppRoutes() {
 
         <Route path="profile" element={<ProfilePage />} />
         <Route path="rcjo" element={<RCJOPage />} />
+        <Route path="resume-builder" element={<ResumeBuilder />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

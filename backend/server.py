@@ -21,6 +21,7 @@ import jwt
 import httpx
 import certifi
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from ai_engine import process_ai_request
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -51,6 +52,16 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class AIProcessRequest(BaseModel):
+    block_type: str
+    raw_text: str
+    target_role: Optional[str] = None
+
+class ResumeModel(BaseModel):
+    id: Optional[str] = None
+    title: str
+    content: dict # This holds the JSON structure (name, email, summary, experience, etc.)
 
 class UserOut(BaseModel):
     id: str
@@ -97,6 +108,15 @@ class RankingOut(BaseModel):
     name: str
     email: str
     job_count: int
+
+class ChatOut(BaseModel):
+    id: str
+    chat_id: str
+    user_id: Optional[str] = None
+    sender: str # "user" or "bot"
+    type: str # "text" or "image"
+    content: str
+    created_at: str
 
 class RankingOut(BaseModel):
     user_id: str
@@ -195,7 +215,7 @@ async def log_bot_event(
         logger.error(f"Failed to log bot event: {e}")
 
 # ---- Telegram Helpers ----
-async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[dict] = None):
+async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[dict] = None, log_to_chat: bool = True):
     """Send a Telegram message, optionally with inline keyboard buttons. Includes retry mechanism."""
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("No Telegram bot token configured")
@@ -204,6 +224,18 @@ async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[
     payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:
         payload["reply_markup"] = reply_markup
+        
+    if log_to_chat:
+        user = await db.users.find_one({"telegram_chat_id": chat_id})
+        await db.chat_messages.insert_one({
+            "id": str(uuid.uuid4()),
+            "chat_id": chat_id,
+            "user_id": user["id"] if user else None,
+            "sender": "bot",
+            "type": "text",
+            "content": text,
+            "created_at": datetime.now(IST).isoformat()
+        })
         
     for attempt in range(5): # Retry up to 5 times
         try:
@@ -225,11 +257,28 @@ async def send_telegram_message(chat_id: str, text: str, reply_markup: Optional[
             logger.error(f"Telegram error: {e}")
             await asyncio.sleep(1) # Basic backoff
 
-async def send_telegram_photo(chat_id: str, photo_bytes: bytes, caption: str = ""):
+import base64
+
+async def send_telegram_photo(chat_id: str, photo_bytes: bytes, caption: str = "", log_to_chat: bool = True):
     """Send a photo to Telegram."""
     if not TELEGRAM_BOT_TOKEN:
         return
     try:
+        if log_to_chat:
+            user = await db.users.find_one({"telegram_chat_id": chat_id})
+            base64_img = base64.b64encode(photo_bytes).decode('utf-8')
+            mime_type = "image/jpeg" # Assuming JPEG for simplicity
+            html_content = f'<img src="data:{mime_type};base64,{base64_img}" alt="photo" /><br/>{caption}'
+            await db.chat_messages.insert_one({
+                "id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "user_id": user["id"] if user else None,
+                "sender": "bot",
+                "type": "image",
+                "content": html_content,
+                "created_at": datetime.now(IST).isoformat()
+            })
+            
         async with httpx.AsyncClient() as client_http:
             resp = await client_http.post(
                 f"{TELEGRAM_API}/sendPhoto",
@@ -401,6 +450,7 @@ async def lifespan(app: FastAPI):
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
     await db.jobs.create_index("id", unique=True)
+    await db.resumes.create_index("id", unique=True)
     await db.job_responses.create_index([("chat_id", 1), ("job_id", 1)], unique=True)
     await db.reminder_log.create_index([("chat_id", 1), ("job_id", 1), ("sent_at", 1)])
     await db.bot_events.create_index("created_at")
@@ -852,17 +902,24 @@ async def link_telegram(data: TelegramLink, request: Request):
 async def broadcast_message(
     request: Request,
     message: str = Form(...),
-    photo: Optional[UploadFile] = File(None)
+    photo: Optional[UploadFile] = File(None),
+    target_chat_id: Optional[str] = Form(None)
 ):
     await require_admin(request)
     
-    if not message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if not message.strip() and not photo:
+        raise HTTPException(status_code=400, detail="Message or photo must be provided")
     
-    users = await db.users.find(
-        {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
-        {"_id": 0, "telegram_chat_id": 1, "email": 1, "name": 1}
-    ).to_list(1000)
+    if target_chat_id and target_chat_id != "all":
+        users = await db.users.find(
+            {"telegram_chat_id": target_chat_id},
+            {"_id": 0, "telegram_chat_id": 1, "email": 1, "name": 1}
+        ).to_list(1)
+    else:
+        users = await db.users.find(
+            {"$and": [{"telegram_chat_id": {"$ne": None}}, {"telegram_chat_id": {"$ne": ""}}]},
+            {"_id": 0, "telegram_chat_id": 1, "email": 1, "name": 1}
+        ).to_list(1000)
     
     sent_count: int = 0
     failed_count: int = 0
@@ -979,6 +1036,118 @@ async def telegram_webhook(request: Request):
                 )
             else:
                 await send_telegram_message(chat_id, "\u274c No account is linked to this Telegram chat.\n\nTo link, use:\n<code>/start your@email.com</code>")
+        else:
+            # Re-fetch user in case we didn't have it (for logging chat text correctly)
+            user = await db.users.find_one({"telegram_chat_id": chat_id})
+            await db.chat_messages.insert_one({
+                "id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "user_id": user["id"] if user else None,
+                "sender": "user",
+                "type": "text",
+                "content": text,
+                "created_at": datetime.now(IST).isoformat()
+            })
+            
+    # Handle incoming photos
+    if "message" in data and "photo" in data["message"]:
+        message = data["message"]
+        chat_id = str(message["chat"]["id"])
+        # Telegram sends an array of photos with different sizes, the last one is the largest
+        photo_info = message["photo"][-1]
+        file_id = photo_info["file_id"]
+        caption = message.get("caption", "")
+        
+        user = await db.users.find_one({"telegram_chat_id": chat_id})
+        
+        # Download the photo
+        try:
+            async with httpx.AsyncClient() as client_http:
+                # 1. Get file path
+                file_info_resp = await client_http.get(f"{TELEGRAM_API}/getFile?file_id={file_id}")
+                file_info = file_info_resp.json()
+                if file_info.get("ok"):
+                    file_path = file_info["result"]["file_path"]
+                    # 2. Download file
+                    download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
+                    img_resp = await client_http.get(download_url)
+                    
+                    if img_resp.status_code == 200:
+                        import base64
+                        base64_img = base64.b64encode(img_resp.content).decode('utf-8')
+                        mime_type = "image/jpeg" # Adjust based on file_path extension if needed
+                        html_content = f'<img src="data:{mime_type};base64,{base64_img}" alt="User Photo" /><br/>{caption}'
+                        
+                        await db.chat_messages.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "chat_id": chat_id,
+                            "user_id": user["id"] if user else None,
+                            "sender": "user",
+                            "type": "image",
+                            "content": html_content,
+                            "created_at": datetime.now(IST).isoformat()
+                        })
+                    else:
+                        logger.error(f"Failed to download image from telegram: {img_resp.status_code}")
+                else:
+                    logger.error("Failed to get file info from telegram")
+        except Exception as e:
+            logger.error(f"Error downloading photo from telegram: {e}")
+            
+# ---- Chat Endpoints ----
+@api_router.get("/admin/chats/users")
+async def get_chat_users(request: Request):
+    await require_admin(request)
+    
+    # Get all distinct chat IDs
+    pipeline = [
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": "$chat_id",
+            "last_message": {"$first": "$$ROOT"}
+        }}
+    ]
+    latest_chats_raw = await db.chat_messages.aggregate(pipeline).to_list(1000)
+    
+    result = []
+    for chat in latest_chats_raw:
+        chat_id = chat["_id"]
+        last_msg = chat["last_message"]
+        
+        # Resolve user info
+        user = await db.users.find_one({"telegram_chat_id": chat_id}, {"_id": 0, "name": 1, "email": 1, "id": 1})
+        
+        result.append({
+            "chat_id": chat_id,
+            "user_id": user["id"] if user else None,
+            "user_name": user.get("name", f"Chat {chat_id[-4:]}") if user else f"Chat {chat_id[-4:]}",
+            "user_email": user.get("email", "Unknown") if user else "Unknown",
+            "last_message": last_msg["content"],
+            "last_active": last_msg["created_at"]
+        })
+        
+    result.sort(key=lambda x: x["last_active"], reverse=True)
+    return result
+
+@api_router.get("/admin/chats/{chat_id}")
+async def get_chat_history(chat_id: str, request: Request):
+    await require_admin(request)
+    
+    messages = await db.chat_messages.find({"chat_id": chat_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    return messages
+
+class ChatReplyIn(BaseModel):
+    message: str
+
+@api_router.post("/admin/chats/{chat_id}/reply")
+async def reply_to_chat(chat_id: str, payload: ChatReplyIn, request: Request):
+    await require_admin(request)
+    
+    if not payload.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
+    await send_telegram_message(chat_id, payload.message, log_to_chat=True)
+    return {"status": "success", "message": "Reply sent"}
     
     # Handle inline button clicks (callback queries)
     if "callback_query" in data:
@@ -1420,6 +1589,76 @@ async def force_push_jobs(request: Request):
     asyncio.create_task(push_sequence(jobs))
         
     return {"message": f"Queued {len(jobs)} jobs to be sent to all users sequentially.", "jobs_count": len(jobs), "users_count": user_count}
+
+
+# ---- AI Resume Builder Endpoint (Stateless) ----
+
+@api_router.post("/ai/process-block")
+async def process_ai_block(req: AIProcessRequest, request: Request):
+    """Securely pass the user's raw interview response to the AI engine for ATS-optimized JSON."""
+    await get_current_user(request) # Ensure authenticated
+    
+    try:
+        response_data = await process_ai_request(req.block_type, req.raw_text)
+        return response_data
+    except Exception as e:
+        logger.error(f"AI Router Exception: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process text via AI engines.")
+
+# ---- Resume Management ----
+
+@api_router.post("/resumes")
+async def save_resume(data: ResumeModel, request: Request):
+    """Save or update a resume JSON in MongoDB."""
+    user = await get_current_user(request)
+    
+    resume_id = data.id if data.id else str(uuid.uuid4())
+    
+    doc = {
+        "id": resume_id,
+        "user_id": user["id"],
+        "title": data.title,
+        "content": data.content,
+        "updated_at": datetime.now(IST).isoformat()
+    }
+    
+    # Upsert the document
+    await db.resumes.update_one(
+        {"id": resume_id, "user_id": user["id"]},
+        {"$set": doc},
+        upsert=True
+    )
+    
+    return {"message": "Resume saved successfully", "id": resume_id}
+
+@api_router.get("/resumes")
+async def get_resumes(request: Request):
+    """Fetch all resumes for the current user to populate the Left Sidebar history."""
+    user = await get_current_user(request)
+    resumes = await db.resumes.find(
+        {"user_id": user["id"]}, 
+        {"_id": 0, "content": 0} # Exclude full content for list view speed
+    ).sort("updated_at", -1).to_list(100)
+    
+    return resumes
+
+@api_router.get("/resumes/{resume_id}")
+async def get_resume_by_id(resume_id: str, request: Request):
+    """Load a specific resume JSON state."""
+    user = await get_current_user(request)
+    resume = await db.resumes.find_one({"id": resume_id, "user_id": user["id"]}, {"_id": 0})
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return resume
+
+@api_router.delete("/resumes/{resume_id}")
+async def delete_resume(resume_id: str, request: Request):
+    """Delete a resume from history."""
+    user = await get_current_user(request)
+    result = await db.resumes.delete_one({"id": resume_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return {"message": "Resume deleted"}
 
 
 async def self_ping():

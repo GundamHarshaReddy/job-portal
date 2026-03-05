@@ -13,14 +13,14 @@ import {
   Moon,
   Menu,
   X,
-
+  FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
   { to: "/jobs", label: "Jobs", icon: Briefcase },
   { to: "/add-job", label: "Post Job", icon: Plus },
-
+  { to: "/resume-builder", label: "Resume Builder", icon: FileText },
   { to: "/rankings", label: "Rankings", icon: Trophy },
   { to: "/rcjo", label: "RCJO", icon: Briefcase },
 ];

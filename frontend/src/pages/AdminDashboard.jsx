@@ -57,10 +57,12 @@ import {
   ShieldOff,
   Database,
   Server,
+  MessageCircle,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { EmptyState } from "@/components/EmptyState";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function AdminDashboard() {
   const { user, token } = useAuth();
@@ -83,6 +85,15 @@ export default function AdminDashboard() {
   const [expandedUser, setExpandedUser] = useState(null);
   const [userDetail, setUserDetail] = useState(null);
   const [userDetailLoading, setUserDetailLoading] = useState(false);
+  const [broadcastTarget, setBroadcastTarget] = useState("all");
+
+  // Chats State
+  const [chatUsers, setChatUsers] = useState([]);
+  const [selectedChatUser, setSelectedChatUser] = useState(null);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -138,6 +149,52 @@ export default function AdminDashboard() {
       toast.error("Failed to load user details");
     } finally {
       setUserDetailLoading(false);
+    }
+  };
+
+  const fetchChatUsers = useCallback(async () => {
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.get(`${API}/admin/chats/users`, { headers });
+      setChatUsers(res.data);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load chat users");
+    }
+  }, [token]);
+
+  const fetchChatHistory = async (chatId) => {
+    setChatLoading(true);
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.get(`${API}/admin/chats/${chatId}`, { headers });
+      setChatHistory(res.data);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load chat history");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleReplyMessage = async (e) => {
+    e?.preventDefault();
+    if (!replyText.trim() || !selectedChatUser) return;
+
+    setReplying(true);
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      await axios.post(`${API}/admin/chats/${selectedChatUser.chat_id}/reply`, {
+        message: replyText
+      }, { headers });
+      setReplyText("");
+      // Refresh chat history
+      fetchChatHistory(selectedChatUser.chat_id);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || "Failed to send reply");
+    } finally {
+      setReplying(false);
     }
   };
 
@@ -237,6 +294,9 @@ export default function AdminDashboard() {
       formData.append("message", broadcastMsg);
       if (broadcastFile) {
         formData.append("photo", broadcastFile);
+      }
+      if (broadcastTarget !== "all") {
+        formData.append("target_chat_id", broadcastTarget);
       }
 
       const res = await axios.post(`${API}/admin/broadcast`, formData, { headers });
@@ -388,12 +448,15 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <Tabs defaultValue="users" data-testid="admin-tabs">
-        <TabsList className="grid w-full max-w-2xl grid-cols-4">
+        <TabsList className="grid w-full max-w-3xl grid-cols-5">
           <TabsTrigger value="users" data-testid="admin-tab-users">
             <Users className="h-4 w-4 mr-2" /> Users ({users.length})
           </TabsTrigger>
           <TabsTrigger value="jobs" data-testid="admin-tab-jobs">
             <Briefcase className="h-4 w-4 mr-2" /> Jobs ({jobs.length})
+          </TabsTrigger>
+          <TabsTrigger value="chats" data-testid="admin-tab-chats" onClick={() => fetchChatUsers()}>
+            <MessageCircle className="h-4 w-4 mr-2" /> Chats
           </TabsTrigger>
           <TabsTrigger value="broadcast" data-testid="admin-tab-broadcast">
             <MessageSquare className="h-4 w-4 mr-2" /> Broadcast
@@ -584,6 +647,121 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
+        {/* Chats Tab */}
+        <TabsContent value="chats" className="mt-4">
+          <Card className="h-[600px] flex overflow-hidden">
+            {/* Sidebar */}
+            <div className="w-1/3 border-r h-full overflow-y-auto bg-muted/10">
+              <div className="p-4 border-b bg-muted/20 font-semibold sticky top-0 z-10 flex items-center gap-2">
+                <MessageCircle className="h-4 w-4" /> User Chats
+              </div>
+              {chatUsers.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">No chats found.</div>
+              ) : (
+                <div className="divide-y">
+                  {chatUsers.map(u => (
+                    <div
+                      key={u.chat_id}
+                      onClick={() => {
+                        setSelectedChatUser(u);
+                        fetchChatHistory(u.chat_id);
+                      }}
+                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${selectedChatUser?.chat_id === u.chat_id ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <p className="font-medium text-sm truncate pr-2">{u.user_name}</p>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(u.last_active).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        {u.last_message.includes('<img') ? '📷 Image' : u.last_message}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Chat Body */}
+            <div className="w-2/3 flex flex-col h-full bg-background relative">
+              {selectedChatUser ? (
+                <>
+                  <div className="p-4 border-b bg-muted/10 flex items-center justify-between sticky top-0 z-10">
+                    <div>
+                      <h3 className="font-semibold text-sm">{selectedChatUser.user_name}</h3>
+                      <p className="text-xs text-muted-foreground">{selectedChatUser.user_email}</p>
+                    </div>
+                    <div className="text-xs bg-muted px-2 py-1 rounded-md text-muted-foreground font-mono">ID: {selectedChatUser.chat_id}</div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {chatLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+                      </div>
+                    ) : chatHistory.length === 0 ? (
+                      <div className="text-center text-muted-foreground text-sm py-10">No messages found for this chat.</div>
+                    ) : (
+                      <div className="flex flex-col gap-3 pb-4">
+                        {chatHistory.map(msg => {
+                          const isBot = msg.sender === "bot";
+                          return (
+                            <div key={msg.id} className={`flex max-w-[85%] ${isBot ? 'self-start' : 'self-end'}`}>
+                              <div className={`rounded-xl px-4 py-2 ${isBot ? 'bg-muted text-foreground' : 'bg-primary text-primary-foreground'}`}>
+                                <div className="text-xs mb-1 opacity-70 flex justify-between gap-4">
+                                  <span>{isBot ? "Bot" : "User"}</span>
+                                  <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                                <div className="text-sm render-html break-words whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reply Box */}
+                  <div className="p-4 border-t bg-background">
+                    <form
+                      onSubmit={handleReplyMessage}
+                      className="flex gap-2 items-end"
+                    >
+                      <Textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Type your reply here..."
+                        className="min-h-[60px] resize-none"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleReplyMessage();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="submit"
+                        disabled={replying || !replyText.trim()}
+                        className="shrink-0"
+                      >
+                        {replying ? (
+                          <div className="animate-spin h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </form>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <MessageCircle className="h-12 w-12 mb-4 opacity-20" />
+                  <p>Select a user to view chat history</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="broadcast" className="mt-4">
           <Card>
             <CardHeader>
@@ -596,51 +774,69 @@ export default function AdminDashboard() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="broadcast-msg">Message</Label>
-                <Textarea
-                  id="broadcast-msg"
-                  placeholder="Type your broadcast message here... Supports HTML: <b>bold</b>, <i>italic</i>, <code>code</code>"
-                  value={broadcastMsg}
-                  onChange={(e) => setBroadcastMsg(e.target.value)}
-                  rows={5}
-                  className="resize-none"
-                  data-testid="broadcast-textarea"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="broadcast-photo">Attach Screenshot (Optional)</Label>
-                <Input
-                  id="broadcast-photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setBroadcastFile(e.target.files[0] || null)}
-                />
-              </div>
-              {linkedUsersCount === 0 ? (
-                <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                  ⚠️ No users have linked their Telegram yet. Ask users to message your bot with <code>/start their@email.com</code>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Send To</Label>
+                  <Select value={broadcastTarget} onValueChange={setBroadcastTarget}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select target..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="font-semibold text-primary">📣 All Linked Users ({linkedUsersCount})</SelectItem>
+                      {users.filter(u => u.telegram_chat_id).map(u => (
+                        <SelectItem key={u.id} value={u.telegram_chat_id}>
+                          👤 {u.name} ({u.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              ) : (
-                <Button
-                  onClick={handleBroadcast}
-                  disabled={broadcasting || !broadcastMsg.trim()}
-                  className="gap-2"
-                  data-testid="broadcast-send-btn"
-                >
-                  {broadcasting ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      Send to {linkedUsersCount} user{linkedUsersCount !== 1 ? "s" : ""}
-                    </>
-                  )}
-                </Button>
-              )}
+                <div className="space-y-2">
+                  <Label htmlFor="broadcast-msg">Message</Label>
+                  <Textarea
+                    id="broadcast-msg"
+                    placeholder="Type your broadcast message here... Supports HTML: <b>bold</b>, <i>italic</i>, <code>code</code>"
+                    value={broadcastMsg}
+                    onChange={(e) => setBroadcastMsg(e.target.value)}
+                    rows={5}
+                    className="resize-none"
+                    data-testid="broadcast-textarea"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="broadcast-photo">Attach Screenshot (Optional)</Label>
+                  <Input
+                    id="broadcast-photo"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setBroadcastFile(e.target.files[0] || null)}
+                  />
+                </div>
+                {linkedUsersCount === 0 ? (
+                  <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                    ⚠️ No users have linked their Telegram yet. Ask users to message your bot with <code>/start their@email.com</code>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleBroadcast}
+                    disabled={broadcasting || !broadcastMsg.trim()}
+                    className="gap-2"
+                    data-testid="broadcast-send-btn"
+                  >
+                    {broadcasting ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Send to {linkedUsersCount} user{linkedUsersCount !== 1 ? "s" : ""}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -865,35 +1061,59 @@ export default function AdminDashboard() {
 
               {/* Daily Activity Chart */}
               {botAnalytics.daily_activity.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
+                <Card className="animate-fade-in shadow-sm w-full">
+                  <CardHeader className="pb-3 border-b border-border/50">
+                    <CardTitle className="text-lg flex items-center gap-2 font-semibold">
                       <Activity className="h-5 w-5 text-primary" /> Daily Bot Activity (Last 30 Days)
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-end gap-1 h-40 overflow-x-auto pb-6 relative">
-                      {(() => {
-                        const maxVal = Math.max(...botAnalytics.daily_activity.map(d => d.total), 1);
-                        return botAnalytics.daily_activity.map((d, i) => (
-                          <div key={d.date} className="flex flex-col items-center flex-1 min-w-[18px] group relative">
-                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-popover text-popover-foreground border shadow-lg rounded-md px-2 py-1 text-xs whitespace-nowrap z-10 pointer-events-none">
-                              <div className="font-semibold">{d.date}</div>
-                              <div>Clicks: {d.clicks} · Notifs: {d.notifications} · Rem: {d.reminders}</div>
+                  <CardContent className="pt-6">
+                    <div className="relative h-[256px] w-full">
+                      {/* Horizontal Axis Line */}
+                      <div className="absolute bottom-6 left-0 right-0 h-px bg-border/80 z-0" />
+
+                      <div className="flex items-end gap-2 h-full overflow-x-auto pb-6 pt-16 relative z-10 px-2">
+                        {(() => {
+                          const maxVal = Math.max(...botAnalytics.daily_activity.map(d => d.total), 1);
+                          return botAnalytics.daily_activity.map((d, i) => (
+                            <div key={d.date} className="flex flex-col items-center justify-end flex-1 min-w-[28px] h-full group relative">
+                              {/* Tooltip */}
+                              <div className="absolute -top-14 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-foreground text-background shadow-xl rounded-lg px-3 py-2 text-xs whitespace-nowrap z-50 pointer-events-none translate-y-2 group-hover:translate-y-0 text-center">
+                                <div className="font-bold mb-1">{d.date}</div>
+                                <div className="flex gap-2.5 opacity-90">
+                                  <span><span className="font-semibold text-blue-400">{d.clicks}</span> Clicks</span>
+                                  <span><span className="font-semibold text-emerald-400">{d.notifications}</span> Notifs</span>
+                                  <span><span className="font-semibold text-amber-400">{d.reminders}</span> Reminders</span>
+                                </div>
+                                {/* Tooltip Caret */}
+                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-foreground" />
+                              </div>
+
+                              {/* Bar */}
+                              <div
+                                className={`w-full max-w-[32px] rounded-t-md transition-all duration-300 cursor-pointer ${d.total > 0
+                                  ? "bg-gradient-to-t from-primary/70 to-primary hover:from-primary/90 hover:to-primary shadow-sm hover:shadow-md hover:-translate-y-1"
+                                  : "bg-muted-foreground/20 hover:bg-muted-foreground/30"
+                                  }`}
+                                style={{
+                                  height: d.total > 0 ? `${(d.total / maxVal) * 100}%` : '3px',
+                                  minHeight: d.total > 0 ? '16px' : '3px',
+                                  animationDelay: `${i * 20}ms`
+                                }}
+                              />
+
+                              {/* Label */}
+                              <span className="text-[10px] text-muted-foreground font-medium mt-2 absolute -bottom-5 left-1/2 -translate-x-1/2">
+                                {d.date.slice(5).replace('-', '/')}
+                              </span>
                             </div>
-                            <div
-                              className="w-full rounded-t-sm bg-gradient-to-t from-primary/80 to-primary transition-all duration-500 hover:from-primary hover:to-primary/90 cursor-pointer"
-                              style={{ height: `${Math.max((d.total / maxVal) * 100, 4)}%`, animationDelay: `${i * 30}ms` }}
-                            />
-                            <span className="text-[10px] text-muted-foreground mt-1 -rotate-45 origin-top-left absolute -bottom-5 left-1/2">
-                              {d.date.slice(5)}
-                            </span>
-                          </div>
-                        ));
-                      })()}
+                          ));
+                        })()}
+                      </div>
                     </div>
-                    <div className="flex gap-4 mt-4 text-xs text-muted-foreground">
-                      <span>📊 Hover bars for details</span>
+                    <div className="flex items-center gap-6 mt-2 text-xs text-muted-foreground border-t border-border/40 pt-4">
+                      <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary/80" /> <span className="font-medium">Activity Detected</span></div>
+                      <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-muted-foreground/20" /> <span className="font-medium">No Activity</span></div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1061,5 +1281,6 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
     </div>
+
   );
 }

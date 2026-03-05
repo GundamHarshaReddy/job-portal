@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth, API } from "@/App";
 import axios from "axios";
 import { toast } from "sonner";
@@ -94,6 +94,10 @@ export default function AdminDashboard() {
   const [chatLoading, setChatLoading] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replying, setReplying] = useState(false);
+  const [activeTab, setActiveTab] = useState("users");
+  const [deletingChat, setDeletingChat] = useState(false);
+  const chatPollRef = useRef(null);
+  const usersPollRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -198,9 +202,57 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteChat = async (chatId, userName) => {
+    if (!window.confirm(`Are you sure you want to delete the entire chat history with ${userName}? This cannot be undone.`)) return;
+    setDeletingChat(true);
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const res = await axios.delete(`${API}/admin/chats/${chatId}`, { headers });
+      toast.success(`Deleted ${res.data.deleted_count} messages`);
+      // If this was the selected chat, deselect it
+      if (selectedChatUser?.chat_id === chatId) {
+        setSelectedChatUser(null);
+        setChatHistory([]);
+      }
+      // Refresh user list
+      fetchChatUsers();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || "Failed to delete chat");
+    } finally {
+      setDeletingChat(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-poll chat messages when a chat is selected and chats tab is active
+  useEffect(() => {
+    if (chatPollRef.current) clearInterval(chatPollRef.current);
+    if (activeTab === "chats" && selectedChatUser) {
+      chatPollRef.current = setInterval(() => {
+        const headers = { Authorization: `Bearer ${token}` };
+        axios.get(`${API}/admin/chats/${selectedChatUser.chat_id}`, { headers })
+          .then(res => setChatHistory(res.data))
+          .catch(() => { });
+      }, 5000);
+    }
+    return () => { if (chatPollRef.current) clearInterval(chatPollRef.current); };
+  }, [activeTab, selectedChatUser, token]);
+
+  // Auto-poll chat user list when chats tab is active
+  useEffect(() => {
+    if (usersPollRef.current) clearInterval(usersPollRef.current);
+    if (activeTab === "chats") {
+      fetchChatUsers();
+      usersPollRef.current = setInterval(() => {
+        fetchChatUsers();
+      }, 10000);
+    }
+    return () => { if (usersPollRef.current) clearInterval(usersPollRef.current); };
+  }, [activeTab, fetchChatUsers]);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -447,7 +499,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="users" data-testid="admin-tabs">
+      <Tabs defaultValue="users" data-testid="admin-tabs" onValueChange={setActiveTab}>
         <TabsList className="grid w-full max-w-3xl grid-cols-5">
           <TabsTrigger value="users" data-testid="admin-tab-users">
             <Users className="h-4 w-4 mr-2" /> Users ({users.length})
@@ -455,7 +507,7 @@ export default function AdminDashboard() {
           <TabsTrigger value="jobs" data-testid="admin-tab-jobs">
             <Briefcase className="h-4 w-4 mr-2" /> Jobs ({jobs.length})
           </TabsTrigger>
-          <TabsTrigger value="chats" data-testid="admin-tab-chats" onClick={() => fetchChatUsers()}>
+          <TabsTrigger value="chats" data-testid="admin-tab-chats">
             <MessageCircle className="h-4 w-4 mr-2" /> Chats
           </TabsTrigger>
           <TabsTrigger value="broadcast" data-testid="admin-tab-broadcast">
@@ -666,11 +718,25 @@ export default function AdminDashboard() {
                         setSelectedChatUser(u);
                         fetchChatHistory(u.chat_id);
                       }}
-                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${selectedChatUser?.chat_id === u.chat_id ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors group ${selectedChatUser?.chat_id === u.chat_id ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
                     >
                       <div className="flex justify-between items-start mb-1">
                         <p className="font-medium text-sm truncate pr-2">{u.user_name}</p>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(u.last_active).toLocaleDateString()}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(u.last_active).toLocaleDateString()}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteChat(u.chat_id, u.user_name);
+                            }}
+                            disabled={deletingChat}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                       <p className="text-xs text-muted-foreground line-clamp-1">
                         {u.last_message.includes('<img') ? '📷 Image' : u.last_message}
@@ -690,7 +756,19 @@ export default function AdminDashboard() {
                       <h3 className="font-semibold text-sm">{selectedChatUser.user_name}</h3>
                       <p className="text-xs text-muted-foreground">{selectedChatUser.user_email}</p>
                     </div>
-                    <div className="text-xs bg-muted px-2 py-1 rounded-md text-muted-foreground font-mono">ID: {selectedChatUser.chat_id}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs bg-muted px-2 py-1 rounded-md text-muted-foreground font-mono">ID: {selectedChatUser.chat_id}</div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                        onClick={() => handleDeleteChat(selectedChatUser.chat_id, selectedChatUser.user_name)}
+                        disabled={deletingChat}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete Chat
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">

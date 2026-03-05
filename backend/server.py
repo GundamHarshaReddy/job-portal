@@ -1136,6 +1136,15 @@ async def get_chat_history(chat_id: str, request: Request):
     messages = await db.chat_messages.find({"chat_id": chat_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     return messages
 
+@api_router.delete("/admin/chats/{chat_id}")
+async def delete_chat(chat_id: str, request: Request):
+    await require_admin(request)
+    
+    result = await db.chat_messages.delete_many({"chat_id": chat_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="No messages found for this chat")
+    return {"message": f"Deleted {result.deleted_count} messages", "deleted_count": result.deleted_count}
+
 class ChatReplyIn(BaseModel):
     message: str
 
